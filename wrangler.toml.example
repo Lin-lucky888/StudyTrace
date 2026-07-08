@@ -1,4 +1,4 @@
-name = "your-app-name"
+name = "studytrace"
 main = ".open-next/worker.js"
 compatibility_date = "2025-03-01"
 compatibility_flags = ["nodejs_compat"]
@@ -18,7 +18,8 @@ enabled = true
 [vars]
 # app
 NEXT_PUBLIC_APP_URL = "http://localhost:3000"
-NEXT_PUBLIC_APP_NAME = "Your App Name"
+NEXT_PUBLIC_APP_NAME = "StudyTrace"
+NEXT_PUBLIC_APP_DESCRIPTION = "Academic process proof and appeal evidence chain for international students"
 
 # theme
 NEXT_PUBLIC_THEME = "default"
@@ -35,3 +36,10 @@ DB_MAX_CONNECTIONS = "1"
 # auth secret
 # openssl rand -base64 32
 AUTH_SECRET = ""
+
+# StudyTrace AI analysis
+STUDYTRACE_AI_PROVIDER = "evolink"
+STUDYTRACE_AI_BASE_URL = "https://direct.evolink.ai"
+STUDYTRACE_AI_MODEL = "MiniMax-M3"
+STUDYTRACE_ANALYSIS_COST_CREDITS = "1"
+STUDYTRACE_ANALYSIS_MIN_INTERVAL_MS = "5000"

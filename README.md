@@ -1,19 +1,21 @@
-# ShipAny Template Two
+# StudyTrace
 
-## Getting Started
+StudyTrace is an academic process proof and appeal evidence chain product for international students.
 
-read [ShipAny Document](https://shipany.ai/docs/quick-start) to start your AI SaaS project.
+It helps students organize writing-process records, citation sources, AI-use boundaries, feedback, and risk explanations into a structured appeal report draft.
 
-## Buy Templates
+## Core Flow
 
-check [ShipAny Templates](https://shipany.ai/templates) to buy Business Templates.
+1. Upload essays and supporting materials
+2. Generate evidence cards
+3. Build an academic process timeline
+4. Explain review risks
+5. Export an appeal report
 
-## Feedback
+## Environment
 
-submit your feedbacks on [Github Issues](https://github.com/shipanyai/shipany-template-two/issues)
+Copy `.env.example` to `.env.local`, then configure the database, authentication, and StudyTrace AI analysis settings for your deployment.
 
-## LICENSE
+## License
 
-!!! Please do not publicly release ShipAny's Code. Illegal use will be prosecuted
-
-[ShipAny LICENSE](./LICENSE)
+See [LICENSE](./LICENSE).

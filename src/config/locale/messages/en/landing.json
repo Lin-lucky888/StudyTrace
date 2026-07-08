@@ -14,72 +14,49 @@
     "nav": {
       "items": [
         {
-          "title": "Workbench",
-          "url": "/studytrace",
+          "title": "Workflow",
+          "url": "/#workflow",
+          "icon": "Route"
+        },
+        {
+          "title": "Evidence",
+          "url": "/#evidence",
+          "icon": "FileText"
+        },
+        {
+          "title": "Risk",
+          "url": "/#risk",
           "icon": "ShieldCheck"
         },
         {
-          "title": "Features",
-          "url": "/#features",
-          "icon": "Sparkles"
+          "title": "FAQ",
+          "url": "/#faq",
+          "icon": "CircleHelp"
         },
         {
-          "title": "Process",
-          "url": "/#usage",
-          "icon": "History"
-        },
-        {
-          "title": "Pricing",
-          "url": "/pricing",
-          "icon": "DollarSign"
-        },
-        {
-          "title": "Resources",
-          "icon": "FileText",
-          "children": [
-            {
-              "title": "Docs",
-              "description": "Read StudyTrace documentation",
-              "url": "/docs",
-              "target": "_blank",
-              "icon": "BookOpenText"
-            },
-            {
-              "title": "Blog",
-              "description": "Academic process proof guides",
-              "url": "/blog",
-              "icon": "Newspaper"
-            },
-            {
-              "title": "Updates",
-              "description": "Product updates",
-              "url": "/updates",
-              "icon": "Clock"
-            }
-          ]
+          "title": "Workspace",
+          "url": "/studytrace",
+          "icon": "UploadCloud"
         }
       ]
     },
-    "buttons": [],
+    "buttons": [
+      {
+        "title": "Open Workspace",
+        "url": "/studytrace",
+        "target": "_self",
+        "icon": "UploadCloud"
+      }
+    ],
     "user_nav": {
       "show_name": true,
-      "show_credits": true,
+      "show_credits": false,
       "show_sign_out": true,
       "items": [
         {
-          "title": "Workbench",
+          "title": "Workspace",
           "url": "/studytrace",
-          "icon": "ShieldCheck"
-        },
-        {
-          "title": "Billing",
-          "url": "/settings/billing",
-          "icon": "CreditCard"
-        },
-        {
-          "title": "Activity",
-          "url": "/activity",
-          "icon": "Activity"
+          "icon": "FileText"
         }
       ]
     },
@@ -91,7 +68,7 @@
     "id": "footer",
     "brand": {
       "title": "StudyTrace",
-      "description": "StudyTrace helps international students organize a credible, explainable, and traceable academic process proof package.",
+      "description": "Academic process proof and appeal evidence chain generation for international students.",
       "logo": {
         "src": "/logo.png",
         "alt": "StudyTrace",
@@ -106,45 +83,35 @@
           "title": "Product",
           "children": [
             {
-              "title": "Workbench",
+              "title": "Workflow",
+              "url": "/#workflow",
+              "target": "_self"
+            },
+            {
+              "title": "Evidence Cards",
+              "url": "/#evidence",
+              "target": "_self"
+            },
+            {
+              "title": "Risk Explanation",
+              "url": "/#risk",
+              "target": "_self"
+            },
+            {
+              "title": "Workspace",
               "url": "/studytrace",
               "target": "_self"
-            },
-            {
-              "title": "Features",
-              "url": "/#features",
-              "target": "_self"
-            },
-            {
-              "title": "Pricing",
-              "url": "/pricing",
-              "target": "_self"
             }
           ]
         },
         {
-          "title": "Resources",
+          "title": "Trust",
           "children": [
             {
-              "title": "Docs",
-              "url": "/docs",
+              "title": "FAQ",
+              "url": "/#faq",
               "target": "_self"
             },
-            {
-              "title": "Blog",
-              "url": "/blog",
-              "target": "_self"
-            },
-            {
-              "title": "Updates",
-              "url": "/updates",
-              "target": "_self"
-            }
-          ]
-        },
-        {
-          "title": "Legal",
-          "children": [
             {
               "title": "Privacy Policy",
               "url": "/privacy-policy",
@@ -153,6 +120,16 @@
             {
               "title": "Terms of Service",
               "url": "/terms-of-service",
+              "target": "_self"
+            }
+          ]
+        },
+        {
+          "title": "Support",
+          "children": [
+            {
+              "title": "Email Support",
+              "url": "mailto:support@studytrace.app",
               "target": "_self"
             }
           ]
@@ -181,6 +158,7 @@
         }
       ]
     },
+    "show_built_with": false,
     "show_theme": true,
     "show_locale": true
   }

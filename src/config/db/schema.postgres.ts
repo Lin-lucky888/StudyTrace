@@ -555,3 +555,204 @@ export const chatMessage = table(
     index('idx_chat_message_user_id').on(table.userId, table.status),
   ]
 );
+
+export const studytraceProject = table(
+  'studytrace_project',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    title: text('title').notNull().default(''),
+    courseName: text('course_name').notNull().default(''),
+    institutionPolicy: text('institution_policy').notNull().default(''),
+    concern: text('concern').notNull().default(''),
+    aiBoundary: text('ai_boundary').notNull().default(''),
+    settings: text('settings').notNull().default('{}'),
+    status: text('status').notNull().default('active'),
+    latestTrustScore: integer('latest_trust_score').notNull().default(0),
+    lastAnalyzedAt: timestamp('last_analyzed_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at')
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+    deletedAt: timestamp('deleted_at'),
+  },
+  (table) => [
+    index('idx_st_project_user_status').on(table.userId, table.status),
+    index('idx_st_project_updated_at').on(table.updatedAt),
+  ]
+);
+
+export const studytraceFile = table(
+  'studytrace_file',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => studytraceProject.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    size: integer('size').notNull().default(0),
+    type: text('type').notNull().default(''),
+    extension: text('extension').notNull().default(''),
+    category: text('category').notNull().default('other'),
+    storageKey: text('storage_key'),
+    storageUrl: text('storage_url'),
+    checksum: text('checksum'),
+    extractedText: text('extracted_text'),
+    lastModifiedAt: timestamp('last_modified_at'),
+    metadata: text('metadata'),
+    status: text('status').notNull().default('active'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at')
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+    deletedAt: timestamp('deleted_at'),
+  },
+  (table) => [
+    index('idx_st_file_project_status').on(table.projectId, table.status),
+    index('idx_st_file_user_status').on(table.userId, table.status),
+  ]
+);
+
+export const studytraceEvidenceCard = table(
+  'studytrace_evidence_card',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => studytraceProject.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    fileId: text('file_id').references(() => studytraceFile.id, {
+      onDelete: 'set null',
+    }),
+    title: text('title').notNull(),
+    kind: text('kind').notNull(),
+    source: text('source').notNull().default(''),
+    summary: text('summary').notNull().default(''),
+    notes: text('notes').notNull().default(''),
+    strength: text('strength').notNull().default('medium'),
+    tags: text('tags').notNull().default('[]'),
+    riskFlags: text('risk_flags').notNull().default('[]'),
+    sort: integer('sort').notNull().default(0),
+    status: text('status').notNull().default('active'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at')
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+    deletedAt: timestamp('deleted_at'),
+  },
+  (table) => [
+    index('idx_st_card_project_status').on(table.projectId, table.status),
+    index('idx_st_card_user_kind').on(table.userId, table.kind),
+  ]
+);
+
+export const studytraceTimelineEvent = table(
+  'studytrace_timeline_event',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => studytraceProject.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    fileId: text('file_id').references(() => studytraceFile.id, {
+      onDelete: 'set null',
+    }),
+    eventAt: timestamp('event_at'),
+    label: text('label').notNull(),
+    detail: text('detail').notNull().default(''),
+    source: text('source').notNull().default(''),
+    strength: text('strength').notNull().default('medium'),
+    sort: integer('sort').notNull().default(0),
+    status: text('status').notNull().default('active'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at')
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+    deletedAt: timestamp('deleted_at'),
+  },
+  (table) => [
+    index('idx_st_event_project_time').on(table.projectId, table.eventAt),
+    index('idx_st_event_user_status').on(table.userId, table.status),
+  ]
+);
+
+export const studytraceAnalysisRun = table(
+  'studytrace_analysis_run',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id').references(() => studytraceProject.id, {
+      onDelete: 'set null',
+    }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    provider: text('provider').notNull().default(''),
+    model: text('model').notNull().default(''),
+    status: text('status').notNull(),
+    providerStatus: text('provider_status').notNull().default('local'),
+    trustScore: integer('trust_score').notNull().default(0),
+    summary: text('summary').notNull().default(''),
+    riskItems: text('risk_items').notNull().default('[]'),
+    timelineFindings: text('timeline_findings').notNull().default('[]'),
+    evidenceGaps: text('evidence_gaps').notNull().default('[]'),
+    appealOutline: text('appeal_outline').notNull().default('[]'),
+    aiBoundaryStatement: text('ai_boundary_statement').notNull().default(''),
+    exportChecklist: text('export_checklist').notNull().default('[]'),
+    inputSnapshot: text('input_snapshot'),
+    rawOutput: text('raw_output'),
+    error: text('error'),
+    costCredits: integer('cost_credits').notNull().default(0),
+    creditId: text('credit_id'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [
+    index('idx_st_run_project_created').on(table.projectId, table.createdAt),
+    index('idx_st_run_user_status').on(table.userId, table.status),
+  ]
+);
+
+export const studytraceReport = table(
+  'studytrace_report',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => studytraceProject.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    analysisRunId: text('analysis_run_id').references(
+      () => studytraceAnalysisRun.id,
+      { onDelete: 'set null' }
+    ),
+    title: text('title').notNull().default(''),
+    format: text('format').notNull().default('markdown'),
+    content: text('content').notNull().default(''),
+    storageKey: text('storage_key'),
+    storageUrl: text('storage_url'),
+    status: text('status').notNull().default('active'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at')
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+    deletedAt: timestamp('deleted_at'),
+  },
+  (table) => [
+    index('idx_st_report_project_status').on(table.projectId, table.status),
+    index('idx_st_report_user_created').on(table.userId, table.createdAt),
+  ]
+);

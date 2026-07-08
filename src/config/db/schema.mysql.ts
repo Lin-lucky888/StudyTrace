@@ -515,3 +515,191 @@ export const chatMessage = table(
     index('idx_chat_message_user_id').on(table.userId, table.status),
   ]
 );
+
+export const studytraceProject = table(
+  'studytrace_project',
+  {
+    id: varchar191('id').primaryKey(),
+    userId: varchar191('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    title: varchar('title', { length: 255 }).notNull().default(''),
+    courseName: varchar('course_name', { length: 255 }).notNull().default(''),
+    institutionPolicy: longtext('institution_policy').notNull(),
+    concern: longtext('concern').notNull(),
+    aiBoundary: longtext('ai_boundary').notNull(),
+    settings: longtext('settings').notNull(),
+    status: varchar('status', { length: 50 }).notNull().default('active'),
+    latestTrustScore: int('latest_trust_score').notNull().default(0),
+    lastAnalyzedAt: timestamp('last_analyzed_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().onUpdateNow().notNull(),
+    deletedAt: timestamp('deleted_at'),
+  },
+  (table) => [
+    index('idx_st_project_user_status').on(table.userId, table.status),
+    index('idx_st_project_updated_at').on(table.updatedAt),
+  ]
+);
+
+export const studytraceFile = table(
+  'studytrace_file',
+  {
+    id: varchar191('id').primaryKey(),
+    projectId: varchar191('project_id')
+      .notNull()
+      .references(() => studytraceProject.id, { onDelete: 'cascade' }),
+    userId: varchar191('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 255 }).notNull(),
+    size: int('size').notNull().default(0),
+    type: varchar('type', { length: 100 }).notNull().default(''),
+    extension: varchar('extension', { length: 50 }).notNull().default(''),
+    category: varchar('category', { length: 50 }).notNull().default('other'),
+    storageKey: varchar191('storage_key'),
+    storageUrl: text('storage_url'),
+    checksum: varchar191('checksum'),
+    extractedText: longtext('extracted_text'),
+    lastModifiedAt: timestamp('last_modified_at'),
+    metadata: longtext('metadata'),
+    status: varchar('status', { length: 50 }).notNull().default('active'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().onUpdateNow().notNull(),
+    deletedAt: timestamp('deleted_at'),
+  },
+  (table) => [
+    index('idx_st_file_project_status').on(table.projectId, table.status),
+    index('idx_st_file_user_status').on(table.userId, table.status),
+  ]
+);
+
+export const studytraceEvidenceCard = table(
+  'studytrace_evidence_card',
+  {
+    id: varchar191('id').primaryKey(),
+    projectId: varchar191('project_id')
+      .notNull()
+      .references(() => studytraceProject.id, { onDelete: 'cascade' }),
+    userId: varchar191('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    fileId: varchar191('file_id').references(() => studytraceFile.id, {
+      onDelete: 'set null',
+    }),
+    title: varchar('title', { length: 255 }).notNull(),
+    kind: varchar('kind', { length: 50 }).notNull(),
+    source: varchar('source', { length: 255 }).notNull().default(''),
+    summary: longtext('summary').notNull(),
+    notes: longtext('notes').notNull(),
+    strength: varchar('strength', { length: 50 }).notNull().default('medium'),
+    tags: longtext('tags').notNull(),
+    riskFlags: longtext('risk_flags').notNull(),
+    sort: int('sort').notNull().default(0),
+    status: varchar('status', { length: 50 }).notNull().default('active'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().onUpdateNow().notNull(),
+    deletedAt: timestamp('deleted_at'),
+  },
+  (table) => [
+    index('idx_st_card_project_status').on(table.projectId, table.status),
+    index('idx_st_card_user_kind').on(table.userId, table.kind),
+  ]
+);
+
+export const studytraceTimelineEvent = table(
+  'studytrace_timeline_event',
+  {
+    id: varchar191('id').primaryKey(),
+    projectId: varchar191('project_id')
+      .notNull()
+      .references(() => studytraceProject.id, { onDelete: 'cascade' }),
+    userId: varchar191('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    fileId: varchar191('file_id').references(() => studytraceFile.id, {
+      onDelete: 'set null',
+    }),
+    eventAt: timestamp('event_at'),
+    label: varchar('label', { length: 255 }).notNull(),
+    detail: longtext('detail').notNull(),
+    source: varchar('source', { length: 255 }).notNull().default(''),
+    strength: varchar('strength', { length: 50 }).notNull().default('medium'),
+    sort: int('sort').notNull().default(0),
+    status: varchar('status', { length: 50 }).notNull().default('active'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().onUpdateNow().notNull(),
+    deletedAt: timestamp('deleted_at'),
+  },
+  (table) => [
+    index('idx_st_event_project_time').on(table.projectId, table.eventAt),
+    index('idx_st_event_user_status').on(table.userId, table.status),
+  ]
+);
+
+export const studytraceAnalysisRun = table(
+  'studytrace_analysis_run',
+  {
+    id: varchar191('id').primaryKey(),
+    projectId: varchar191('project_id').references(() => studytraceProject.id, {
+      onDelete: 'set null',
+    }),
+    userId: varchar191('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    provider: varchar('provider', { length: 50 }).notNull().default(''),
+    model: varchar191('model').notNull().default(''),
+    status: varchar('status', { length: 50 }).notNull(),
+    providerStatus: varchar('provider_status', { length: 50 })
+      .notNull()
+      .default('local'),
+    trustScore: int('trust_score').notNull().default(0),
+    summary: longtext('summary').notNull(),
+    riskItems: longtext('risk_items').notNull(),
+    timelineFindings: longtext('timeline_findings').notNull(),
+    evidenceGaps: longtext('evidence_gaps').notNull(),
+    appealOutline: longtext('appeal_outline').notNull(),
+    aiBoundaryStatement: longtext('ai_boundary_statement').notNull(),
+    exportChecklist: longtext('export_checklist').notNull(),
+    inputSnapshot: longtext('input_snapshot'),
+    rawOutput: longtext('raw_output'),
+    error: longtext('error'),
+    costCredits: int('cost_credits').notNull().default(0),
+    creditId: varchar191('credit_id'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [
+    index('idx_st_run_project_created').on(table.projectId, table.createdAt),
+    index('idx_st_run_user_status').on(table.userId, table.status),
+  ]
+);
+
+export const studytraceReport = table(
+  'studytrace_report',
+  {
+    id: varchar191('id').primaryKey(),
+    projectId: varchar191('project_id')
+      .notNull()
+      .references(() => studytraceProject.id, { onDelete: 'cascade' }),
+    userId: varchar191('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    analysisRunId: varchar191('analysis_run_id').references(
+      () => studytraceAnalysisRun.id,
+      { onDelete: 'set null' }
+    ),
+    title: varchar('title', { length: 255 }).notNull().default(''),
+    format: varchar('format', { length: 50 }).notNull().default('markdown'),
+    content: longtext('content').notNull(),
+    storageKey: varchar191('storage_key'),
+    storageUrl: text('storage_url'),
+    status: varchar('status', { length: 50 }).notNull().default('active'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().onUpdateNow().notNull(),
+    deletedAt: timestamp('deleted_at'),
+  },
+  (table) => [
+    index('idx_st_report_project_status').on(table.projectId, table.status),
+    index('idx_st_report_user_created').on(table.userId, table.createdAt),
+  ]
+);

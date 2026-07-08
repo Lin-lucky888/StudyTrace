@@ -14,6 +14,9 @@ export function FeaturesStep({
   section: Section;
   className?: string;
 }) {
+  const gridColumnsClass =
+    section.grid_columns === 5 ? '@3xl:grid-cols-5' : '@3xl:grid-cols-4';
+
   return (
     <section
       id={section.id}
@@ -34,7 +37,7 @@ export function FeaturesStep({
           </ScrollAnimation>
 
           <ScrollAnimation delay={0.2}>
-            <div className="mt-20 grid gap-12 @3xl:grid-cols-4">
+            <div className={cn('mt-20 grid gap-12', gridColumnsClass)}>
               {section.items?.map((item, idx) => (
                 <div className="space-y-6" key={idx}>
                   <div className="text-center">

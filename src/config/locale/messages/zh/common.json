@@ -1,8 +1,8 @@
 {
   "metadata": {
-    "title": "ShipAny 模板二",
-    "description": "ShipAny 是用于构建 AI SaaS 创业项目的 NextJS 脚手架。提供丰富模板和组件，助您快速上线产品。",
-    "keywords": "shipany, shipany-boilerplate, shipany-template-two-demo"
+    "title": "StudyTrace 学术证据链",
+    "description": "StudyTrace 帮助留学生整理写作过程证明、引用来源、AI 使用边界、风险解释和申诉报告。",
+    "keywords": "留学生申诉, 学术过程证明, 申诉证据链, AI 使用说明, 写作过程证据"
   },
   "sign": {
     "sign_in_title": "登录",

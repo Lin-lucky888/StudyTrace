@@ -1,15 +1,15 @@
 {
   "metadata": {
-    "title": "Pricing",
-    "description": "Start with a plan"
+    "title": "StudyTrace Pricing",
+    "description": "Choose a StudyTrace plan for AI analysis credits, saved evidence projects, and report exports."
   },
   "page": {
-    "title": "ShipAny Pricing",
+    "title": "StudyTrace Pricing",
     "sections": {
       "pricing": {
         "id": "pricing",
         "title": "Pricing",
-        "description": "Get all features of ShipAny, Ship your AI SaaS startups fast.",
+        "description": "Start with a small evidence pack or subscribe for recurring academic process analysis credits.",
         "groups": [
           {
             "name": "one-time",
@@ -19,313 +19,171 @@
             "name": "monthly",
             "title": "Monthly",
             "is_featured": true,
-            "label": "save 15%"
+            "label": "best for active students"
           },
           {
             "name": "yearly",
-            "title": "Annually"
+            "title": "Annually",
+            "label": "save more"
           }
         ],
         "items": [
           {
-            "title": "Starter",
-            "description": "Get started with your first SaaS startup.",
+            "title": "Evidence Pack",
+            "description": "A small credit pack for one appeal package or a few practice analyses.",
             "features_title": "Includes",
             "features": [
-              "100 credits, valid for 1 month",
-              "NextJS boilerplate",
-              "SEO-friendly structure",
-              "Payment with Stripe",
-              "Data storage with Supabase",
-              "Google Oauth & One-Tap Login",
-              "i18n support"
+              "20 credits, valid for 30 days",
+              "AI risk explanation",
+              "Evidence cards and timeline workspace",
+              "Markdown report export",
+              "Local fallback analysis"
             ],
             "interval": "one-time",
-            "amount": 9900,
+            "amount": 990,
             "currency": "USD",
-            "price": "$99",
-            "original_price": "$199",
+            "price": "$9.90",
+            "original_price": "",
             "unit": "",
             "is_featured": false,
-            "tip": "Pay once. Build unlimited projects!",
+            "tip": "Pay once. Credits expire after 30 days.",
             "button": {
-              "title": "Get ShipAny",
-              "url": "/#pricing",
+              "title": "Buy Credits",
+              "url": "/pricing",
               "icon": "RiFlashlightFill"
             },
-            "product_id": "starter",
-            "product_name": "ShipAny Boilerplate Starter",
-            "credits": 100,
+            "product_id": "studytrace-evidence-pack",
+            "product_name": "StudyTrace Evidence Pack",
+            "credits": 20,
             "valid_days": 30,
             "group": "one-time"
           },
           {
-            "title": "Standard",
-            "description": "Ship Fast with your SaaS Startups.",
-            "label": "Popular",
-            "features_title": "Everything in Starter, plus",
-            "features": [
-              "200 credits, valid for 3 month",
-              "Deploy with Vercel or Cloudflare",
-              "Generation of Privacy & Terms",
-              "Google Analytics Integration",
-              "Google Search Console Integration",
-              "Discord community",
-              "Technical support for your first ship",
-              "Lifetime updates"
-            ],
-            "interval": "one-time",
-            "amount": 19900,
-            "currency": "USD",
-            "price": "$199",
-            "original_price": "$299",
-            "unit": "",
-            "is_featured": true,
-            "tip": "Pay once. Build unlimited projects!",
-            "button": {
-              "title": "Get ShipAny",
-              "url": "/#pricing",
-              "icon": "RiFlashlightFill"
-            },
-            "product_id": "standard",
-            "product_name": "ShipAny Boilerplate Standard",
-            "credits": 200,
-            "valid_days": 90,
-            "group": "one-time"
-          },
-          {
-            "title": "Premium",
-            "description": "Ship Any AI SaaS Startups.",
-            "features_title": "Everything in Standard, plus",
-            "features": [
-              "300 credits, valid for 1 year",
-              "Business Functions with AI",
-              "User Center",
-              "Credits System",
-              "API Sales for your SaaS",
-              "Admin System",
-              "Priority Technical Support"
-            ],
-            "interval": "one-time",
-            "amount": 29900,
-            "currency": "USD",
-            "price": "$299",
-            "original_price": "$399",
-            "unit": "",
-            "is_featured": false,
-            "tip": "Pay once. Build unlimited projects!",
-            "button": {
-              "title": "Get ShipAny",
-              "url": "/#pricing",
-              "icon": "RiFlashlightFill"
-            },
-            "product_id": "premium",
-            "product_name": "ShipAny Boilerplate Premium",
-            "credits": 300,
-            "valid_days": 365,
-            "group": "one-time"
-          },
-          {
-            "title": "Starter",
-            "description": "Get started with your first SaaS startup.",
+            "title": "Student",
+            "description": "For students preparing one or two assignments each month.",
+            "label": "Starter",
             "features_title": "Includes",
             "features": [
-              "100 credits, valid for 1 month",
-              "NextJS boilerplate",
-              "SEO-friendly structure",
-              "Payment with Stripe",
-              "Data storage with Supabase",
-              "Google Oauth & One-Tap Login",
-              "i18n support"
+              "60 credits per month",
+              "AI analysis for evidence cards and timelines",
+              "Appeal report draft export",
+              "Saved workspace support after database setup",
+              "Email support"
             ],
             "interval": "month",
-            "amount": 8900,
+            "amount": 1200,
             "currency": "USD",
-            "price": "$89",
-            "original_price": "$99",
+            "price": "$12",
+            "original_price": "",
             "unit": "/ month",
             "is_featured": false,
-            "tip": "Pay monthly. Build unlimited projects!",
+            "tip": "Good for light monthly use.",
             "button": {
-              "title": "Get ShipAny",
-              "url": "/#pricing",
+              "title": "Start Student",
+              "url": "/pricing",
               "icon": "RiFlashlightFill"
             },
-            "product_id": "starter-monthly",
-            "product_name": "ShipAny Boilerplate Starter Monthly",
-            "credits": 100,
+            "product_id": "studytrace-student-monthly",
+            "product_name": "StudyTrace Student Monthly",
+            "credits": 60,
             "valid_days": 30,
             "group": "monthly",
-            "plan_name": "Starter"
+            "plan_name": "Student"
           },
           {
-            "title": "Standard",
-            "description": "Ship Fast with your SaaS Startups.",
+            "title": "Pro",
+            "description": "For active students, advisors, and support teams handling multiple cases.",
             "label": "Popular",
-            "features_title": "Everything in Starter, plus",
+            "features_title": "Everything in Student, plus",
             "features": [
-              "200 credits, valid for 1 month",
-              "Deploy with Vercel or Cloudflare",
-              "Generation of Privacy & Terms",
-              "Google Analytics Integration",
-              "Google Search Console Integration",
-              "Discord community",
-              "Technical support for your first ship",
-              "Lifetime updates"
+              "200 credits per month",
+              "More AI analysis runs",
+              "Structured report iteration",
+              "Priority support",
+              "Best fit for repeated appeal preparation"
             ],
             "interval": "month",
-            "amount": 16900,
+            "amount": 2900,
             "currency": "USD",
-            "price": "$169",
-            "original_price": "$199",
+            "price": "$29",
+            "original_price": "",
             "unit": "/ month",
             "is_featured": true,
-            "tip": "Pay monthly. Ship Fast with your SaaS Startups.",
+            "tip": "Recommended for ongoing use.",
             "button": {
-              "title": "Get ShipAny",
-              "url": "/#pricing",
+              "title": "Start Pro",
+              "url": "/pricing",
               "icon": "RiFlashlightFill"
             },
-            "product_id": "standard-monthly",
-            "product_name": "ShipAny Boilerplate Standard Monthly",
+            "product_id": "studytrace-pro-monthly",
+            "product_name": "StudyTrace Pro Monthly",
             "credits": 200,
             "valid_days": 30,
             "group": "monthly",
-            "plan_name": "Standard"
+            "plan_name": "Pro"
           },
           {
-            "title": "Premium",
-            "description": "Ship Any AI SaaS Startups.",
-            "features_title": "Everything in Standard, plus",
-            "features": [
-              "300 credits, valid for 1 month",
-              "Business Functions with AI",
-              "User Center",
-              "Credits System",
-              "API Sales for your SaaS",
-              "Admin System",
-              "Priority Technical Support"
-            ],
-            "interval": "month",
-            "amount": 24900,
-            "currency": "USD",
-            "price": "$249",
-            "original_price": "$299",
-            "unit": "/ month",
-            "is_featured": false,
-            "tip": "Pay monthly. Ship Any AI SaaS Startups.",
-            "button": {
-              "title": "Get ShipAny",
-              "url": "/#pricing",
-              "icon": "RiFlashlightFill"
-            },
-            "product_id": "premium-monthly",
-            "product_name": "ShipAny Boilerplate Premium Monthly",
-            "credits": 300,
-            "valid_days": 30,
-            "group": "monthly",
-            "plan_name": "Premium"
-          },
-          {
-            "title": "Starter",
-            "description": "Get started with your first SaaS startup.",
+            "title": "Student Annual",
+            "description": "Lower-cost yearly access for students who want ongoing coverage.",
             "features_title": "Includes",
             "features": [
-              "100 credits, valid for 1 year",
-              "NextJS boilerplate",
-              "SEO-friendly structure",
-              "Payment with Stripe",
-              "Data storage with Supabase",
-              "Google Oauth & One-Tap Login",
-              "i18n support"
+              "720 credits per year",
+              "Equivalent to 60 credits per month",
+              "Evidence cards, timelines, and report exports",
+              "AI risk explanation",
+              "Email support"
             ],
             "interval": "year",
-            "amount": 82800,
+            "amount": 9600,
             "currency": "USD",
-            "price": "$69",
-            "original_price": "$89",
+            "price": "$8",
+            "original_price": "$12",
             "unit": "/ month",
             "is_featured": false,
-            "tip": "Pay annually. Build unlimited projects!",
+            "tip": "Billed annually at $96.",
             "button": {
-              "title": "Get ShipAny",
-              "url": "/#pricing",
+              "title": "Start Annual",
+              "url": "/pricing",
               "icon": "RiFlashlightFill"
             },
-            "product_id": "starter-yearly",
-            "product_name": "ShipAny Boilerplate Starter Annually",
-            "credits": 1200,
+            "product_id": "studytrace-student-yearly",
+            "product_name": "StudyTrace Student Annually",
+            "credits": 720,
             "valid_days": 365,
             "group": "yearly",
-            "plan_name": "Starter"
+            "plan_name": "Student"
           },
           {
-            "title": "Standard",
-            "description": "Ship Fast with your SaaS Startups.",
-            "label": "Popular",
-            "features_title": "Everything in Starter, plus",
+            "title": "Pro Annual",
+            "description": "Annual plan for heavier usage and repeated case preparation.",
+            "label": "Best value",
+            "features_title": "Everything in Pro, plus",
             "features": [
-              "200 credits, valid for 1 year",
-              "Deploy with Vercel or Cloudflare",
-              "Generation of Privacy & Terms",
-              "Google Analytics Integration",
-              "Google Search Console Integration",
-              "Discord community",
-              "Technical support for your first ship",
-              "Lifetime updates"
+              "2400 credits per year",
+              "Equivalent to 200 credits per month",
+              "Priority support",
+              "Lower monthly equivalent price",
+              "Designed for repeated review workflows"
             ],
             "interval": "year",
-            "amount": 154800,
+            "amount": 22800,
             "currency": "USD",
-            "price": "$129",
-            "original_price": "$169",
+            "price": "$19",
+            "original_price": "$29",
             "unit": "/ month",
             "is_featured": true,
-            "tip": "Pay annually. Ship Fast with your SaaS Startups.",
+            "tip": "Billed annually at $228.",
             "button": {
-              "title": "Get ShipAny",
-              "url": "/#pricing",
+              "title": "Start Pro Annual",
+              "url": "/pricing",
               "icon": "RiFlashlightFill"
             },
-            "product_id": "standard-yearly",
-            "product_name": "ShipAny Boilerplate Standard Annually",
+            "product_id": "studytrace-pro-yearly",
+            "product_name": "StudyTrace Pro Annually",
             "credits": 2400,
             "valid_days": 365,
             "group": "yearly",
-            "plan_name": "Standard"
-          },
-          {
-            "title": "Premium",
-            "description": "Ship Any AI SaaS Startups.",
-            "features_title": "Everything in Standard, plus",
-            "features": [
-              "300 credits, valid for 1 year",
-              "Business Functions with AI",
-              "User Center",
-              "Credits System",
-              "API Sales for your SaaS",
-              "Admin System",
-              "Priority Technical Support"
-            ],
-            "interval": "year",
-            "amount": 226800,
-            "currency": "USD",
-            "price": "$189",
-            "original_price": "$249",
-            "unit": "/ month",
-            "is_featured": false,
-            "tip": "Pay annually. Ship Any AI SaaS Startups.",
-            "button": {
-              "title": "Get ShipAny",
-              "url": "/#pricing",
-              "icon": "RiFlashlightFill"
-            },
-            "product_id": "premium-yearly",
-            "product_name": "ShipAny Boilerplate Premium Annually",
-            "credits": 3600,
-            "valid_days": 365,
-            "group": "yearly",
-            "plan_name": "Premium"
+            "plan_name": "Pro"
           }
         ]
       }

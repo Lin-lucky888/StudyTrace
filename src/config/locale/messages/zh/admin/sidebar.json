@@ -1,10 +1,10 @@
 {
   "header": {
     "brand": {
-      "title": "ShipAny Two",
+      "title": "StudyTrace",
       "logo": {
         "src": "/logo.png",
-        "alt": "ShipAny Two"
+        "alt": "StudyTrace"
       },
       "url": "/admin"
     },

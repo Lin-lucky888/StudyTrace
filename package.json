@@ -1,21 +1,15 @@
 {
-  "name": "shipany-template-two",
+  "name": "studytrace",
   "version": "1.8.2",
   "private": true,
-  "author": "ShipAny.ai",
-  "homepage": "https://shipany.ai",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/shipanyai/shipany-template-two"
-  },
+  "author": "StudyTrace",
   "keywords": [
-    "shipany",
-    "shipany-two",
-    "shipany-template-two",
-    "ai-saas-boilerplate",
-    "ai-saas-template",
-    "ai-saas-framework",
-    "ai-saas-development"
+    "studytrace",
+    "academic-integrity",
+    "appeal-evidence",
+    "writing-process",
+    "ai-use-disclosure",
+    "international-students"
   ],
   "scripts": {
     "dev": "next dev --turbopack",

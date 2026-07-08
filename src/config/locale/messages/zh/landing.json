@@ -2,10 +2,10 @@
   "header": {
     "id": "header",
     "brand": {
-      "title": "ShipAny Two",
+      "title": "StudyTrace",
       "logo": {
         "src": "/logo.png",
-        "alt": "ShipAny Two",
+        "alt": "StudyTrace",
         "width": 100,
         "height": 100
       },
@@ -14,110 +14,64 @@
     "nav": {
       "items": [
         {
-          "title": "功能亮点",
-          "url": "/#features",
-          "icon": "Sparkles"
+          "title": "主流程",
+          "url": "/#workflow",
+          "icon": "Route"
         },
         {
-          "title": "案例展示",
-          "url": "/showcases",
-          "icon": "Box"
+          "title": "证据卡",
+          "url": "/#evidence",
+          "icon": "FileText"
         },
         {
-          "title": "价格",
-          "url": "/pricing",
-          "icon": "DollarSign"
+          "title": "风险解释",
+          "url": "/#risk",
+          "icon": "ShieldCheck"
         },
         {
-          "title": "AI",
-          "icon": "RiRobot2Line",
-          "children": [
-            {
-              "title": "AI 图片生成器",
-              "description": "使用 AI 生成图片",
-              "url": "/ai-image-generator",
-              "icon": "RiImage2Line"
-            },
-            {
-              "title": "AI 音乐生成器",
-              "description": "使用 AI 生成美妙的音乐",
-              "url": "/ai-music-generator",
-              "icon": "RiMusic2Line"
-            },
-            {
-              "title": "AI 视频生成器",
-              "description": "使用 AI 生成视频",
-              "url": "/ai-video-generator",
-              "icon": "RiVideoLine"
-            },
-            {
-              "title": "AI 聊天机器人",
-              "description": "与 AI 聊天机器人对话",
-              "url": "/chat",
-              "icon": "RiMessage2Line"
-            }
-          ]
+          "title": "常见问题",
+          "url": "/#faq",
+          "icon": "CircleHelp"
         },
         {
-          "title": "内容",
-          "icon": "FileText",
-          "children": [
-            {
-              "title": "博客",
-              "description": "阅读博客文章",
-              "url": "/blog",
-              "icon": "Newspaper"
-            },
-            {
-              "title": "更新日志",
-              "description": "阅读更新日志",
-              "url": "/updates",
-              "icon": "Clock"
-            },
-            {
-              "title": "文档",
-              "description": "阅读文档",
-              "url": "/docs",
-              "target": "_blank",
-              "icon": "BookOpenText"
-            }
-          ]
+          "title": "工作区",
+          "url": "/studytrace",
+          "icon": "UploadCloud"
         }
       ]
     },
-    "buttons": [],
+    "buttons": [
+      {
+        "title": "打开工作区",
+        "url": "/studytrace",
+        "target": "_self",
+        "icon": "UploadCloud"
+      }
+    ],
     "user_nav": {
       "show_name": true,
-      "show_credits": true,
+      "show_credits": false,
       "show_sign_out": true,
       "items": [
         {
-          "title": "账单",
-          "url": "/settings/billing",
-          "icon": "CreditCard"
-        },
-        {
-          "title": "活动",
-          "url": "/activity",
-          "icon": "Activity"
+          "title": "工作区",
+          "url": "/studytrace",
+          "icon": "FileText"
         }
       ]
     },
     "show_sign": true,
     "show_theme": true,
-    "show_locale": true,
-    "topbanner": {
-      "text": "此网站是 ShipAny 模板的演示站点，购买 ShipAny 模板，请访问 <a href='https://shipany.ai/zh/pricing' class='text-orange-300' target='_blank'>ShipAny 官网</a>"
-    }
+    "show_locale": true
   },
   "footer": {
     "id": "footer",
     "brand": {
-      "title": "ShipAny Two",
-      "description": "ShipAny 是专为 AI SaaS 创业项目打造的 NextJS 模板。丰富模板与组件，极速交付你的产品。",
+      "title": "StudyTrace",
+      "description": "面向留学生的学术过程证明与申诉证据链生成工具。",
       "logo": {
         "src": "/logo.png",
-        "alt": "ShipAny Two",
+        "alt": "StudyTrace",
         "width": 100,
         "height": 100
       },
@@ -126,62 +80,57 @@
     "nav": {
       "items": [
         {
-          "title": "关于我们",
+          "title": "产品",
           "children": [
             {
-              "title": "功能亮点",
-              "url": "/#features",
+              "title": "主流程",
+              "url": "/#workflow",
               "target": "_self"
             },
             {
-              "title": "案例展示",
-              "url": "/showcases",
+              "title": "证据卡",
+              "url": "/#evidence",
               "target": "_self"
             },
             {
-              "title": "价格",
-              "url": "/pricing",
+              "title": "风险解释",
+              "url": "/#risk",
+              "target": "_self"
+            },
+            {
+              "title": "工作区",
+              "url": "/studytrace",
               "target": "_self"
             }
           ]
         },
         {
-          "title": "资源",
+          "title": "信任与合规",
           "children": [
             {
-              "title": "文档",
-              "url": "/docs",
+              "title": "常见问题",
+              "url": "/#faq",
               "target": "_self"
             },
             {
-              "title": "博客",
-              "url": "/blog",
+              "title": "隐私政策",
+              "url": "/privacy-policy",
               "target": "_self"
             },
             {
-              "title": "对话",
-              "url": "/chat",
-              "target": "_blank"
+              "title": "服务条款",
+              "url": "/terms-of-service",
+              "target": "_self"
             }
           ]
         },
         {
-          "title": "合作伙伴",
+          "title": "支持",
           "children": [
             {
-              "title": "ShipAny",
-              "url": "https://shipany.ai",
-              "target": "_blank"
-            },
-            {
-              "title": "ThinkAny",
-              "url": "https://thinkany.ai",
-              "target": "_blank"
-            },
-            {
-              "title": "MCP.so",
-              "url": "https://mcp.so",
-              "target": "_blank"
+              "title": "邮件支持",
+              "url": "mailto:support@studytrace.app",
+              "target": "_self"
             }
           ]
         }
@@ -190,27 +139,9 @@
     "social": {
       "items": [
         {
-          "title": "X",
-          "icon": "RiTwitterXFill",
-          "url": "https://x.com/your-app-name",
-          "target": "_blank"
-        },
-        {
-          "title": "Github",
-          "icon": "Github",
-          "url": "https://github.com/your-app-name",
-          "target": "_blank"
-        },
-        {
-          "title": "Discord",
-          "icon": "RiDiscordFill",
-          "url": "https://discord.gg/your-app-name",
-          "target": "_blank"
-        },
-        {
           "title": "邮箱",
           "icon": "Mail",
-          "url": "mailto:support@your-domain.com",
+          "url": "mailto:support@studytrace.app",
           "target": "_self"
         }
       ]
@@ -227,6 +158,7 @@
         }
       ]
     },
+    "show_built_with": false,
     "show_theme": true,
     "show_locale": true
   }
