@@ -1,32 +1,29 @@
 {
-  "fields": {
-    "email": "Email",
-    "password": "Password",
-    "new_password": "New Password",
-    "confirm_password": "Confirm Password"
-  },
-  "reset_password": {
-    "title": "Reset Password",
-    "description": "Reset your password",
-    "tip": "We will send you an email to reset your password.",
-    "crumbs": {
-      "settings": "Settings",
-      "security": "Security"
-    },
-    "buttons": {
-      "submit": "Save"
-    }
+  "change_password": {
+    "title": "Change Password",
+    "description": "Update the password you use to sign in",
+    "current": "Current Password",
+    "new": "New Password",
+    "new_placeholder": "At least 8 characters",
+    "confirm": "Confirm New Password",
+    "submit": "Update Password",
+    "tip": "Other sessions will be signed out after the password is changed. If you signed up with Google/GitHub only, there is no password to change.",
+    "too_short": "Password must be at least 8 characters.",
+    "mismatch": "Passwords do not match.",
+    "success": "Password updated.",
+    "failed": "Failed to update password."
   },
   "delete_account": {
     "title": "Delete Account",
-    "description": "Delete your account",
-    "tip": "Are you sure you want to delete your account? This action cannot be undone.",
-    "crumbs": {
-      "settings": "Settings",
-      "security": "Security"
-    },
-    "buttons": {
-      "submit": "Delete"
-    }
+    "description": "Permanently delete your account and all associated data",
+    "submit": "Delete Account",
+    "confirm_title": "Delete this account?",
+    "confirm_description": "This permanently deletes your account, projects, credits, and history. This action cannot be undone.",
+    "password": "Password",
+    "password_placeholder": "Enter your password to confirm (leave empty for social login)",
+    "cancel": "Cancel",
+    "confirm": "Permanently Delete",
+    "success": "Your account has been deleted.",
+    "failed": "Failed to delete account."
   }
 }

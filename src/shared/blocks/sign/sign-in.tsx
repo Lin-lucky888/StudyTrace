@@ -166,12 +166,18 @@ export function SignIn({
               <div className="grid gap-2">
                 <div className="flex items-center">
                   <Label htmlFor="password">{t('password_title')}</Label>
-                  {/* <Link
-                    href="#"
-                    className="ml-auto inline-block text-sm underline"
-                  >
-                    Forgot your password?
-                  </Link> */}
+                  {configs.password_reset_enabled === 'true' && (
+                    <Link
+                      href={
+                        email
+                          ? `/forgot-password?email=${encodeURIComponent(email)}`
+                          : '/forgot-password'
+                      }
+                      className="text-muted-foreground ml-auto inline-block text-xs underline"
+                    >
+                      {t('forgot_password')}
+                    </Link>
+                  )}
                 </div>
 
                 <Input

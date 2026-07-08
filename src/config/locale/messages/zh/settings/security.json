@@ -1,32 +1,29 @@
 {
-  "fields": {
-    "email": "邮箱",
-    "password": "密码",
-    "new_password": "新密码",
-    "confirm_password": "确认密码"
-  },
-  "reset_password": {
-    "title": "重置密码",
-    "description": "重置你的密码",
-    "tip": "我们会发送一封邮件到你的邮箱，点击邮件中的链接重置你的密码。",
-    "crumbs": {
-      "settings": "设置",
-      "security": "安全设置"
-    },
-    "buttons": {
-      "submit": "保存"
-    }
+  "change_password": {
+    "title": "修改密码",
+    "description": "更新您的登录密码",
+    "current": "当前密码",
+    "new": "新密码",
+    "new_placeholder": "至少 8 个字符",
+    "confirm": "确认新密码",
+    "submit": "更新密码",
+    "tip": "密码修改后，其他设备的登录会话将被注销。如果您仅使用 Google/GitHub 登录，则无需修改密码。",
+    "too_short": "密码至少需要 8 个字符。",
+    "mismatch": "两次输入的密码不一致。",
+    "success": "密码已更新。",
+    "failed": "密码更新失败。"
   },
   "delete_account": {
     "title": "删除账户",
-    "description": "删除你的账户",
-    "tip": "你确定要删除你的账户吗？此操作无法撤销。",
-    "crumbs": {
-      "settings": "设置",
-      "security": "安全设置"
-    },
-    "buttons": {
-      "submit": "删除"
-    }
+    "description": "永久删除您的账户及所有相关数据",
+    "submit": "删除账户",
+    "confirm_title": "确定删除此账户？",
+    "confirm_description": "这将永久删除您的账户、项目、积分和历史记录，且无法恢复。",
+    "password": "密码",
+    "password_placeholder": "输入密码以确认（社交登录用户可留空）",
+    "cancel": "取消",
+    "confirm": "永久删除",
+    "success": "您的账户已删除。",
+    "failed": "删除账户失败。"
   }
 }

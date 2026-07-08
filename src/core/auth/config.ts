@@ -11,6 +11,7 @@ import {
   getHeaderValue,
   guessLocaleFromAcceptLanguage,
 } from '@/shared/lib/cookie';
+import { ResetPasswordEmail } from '@/shared/blocks/email/reset-password';
 import { getUuid } from '@/shared/lib/hash';
 import { getClientIp } from '@/shared/lib/ip';
 import { grantCreditsForNewUser } from '@/shared/models/credit';
@@ -23,6 +24,10 @@ import { grantRoleForNewUser } from '@/shared/services/rbac';
 const recentVerificationEmailSentAt = new Map<string, number>();
 const VERIFICATION_EMAIL_MIN_INTERVAL_MS = 60_000;
 
+// Same throttle strategy for password reset emails.
+const recentResetEmailSentAt = new Map<string, number>();
+const RESET_EMAIL_MIN_INTERVAL_MS = 60_000;
+
 // Static auth options - NO database connection
 // This ensures zero database calls during build time
 const authOptions = {
@@ -31,6 +36,11 @@ const authOptions = {
   secret: envConfigs.auth_secret,
   trustedOrigins: envConfigs.app_url ? [envConfigs.app_url] : [],
   user: {
+    // Allow authenticated users to delete their own account (with password
+    // confirmation, or a fresh session for social-login users).
+    deleteUser: {
+      enabled: true,
+    },
     // Allow persisting custom columns on user table.
     // Without this, better-auth may ignore extra properties during create/update.
     additionalFields: {
@@ -152,6 +162,47 @@ export async function getAuthOptions(configs: Record<string, string>) {
       requireEmailVerification: emailVerificationEnabled,
       // Avoid creating a session immediately after sign up when verification is required.
       autoSignIn: emailVerificationEnabled ? false : true,
+      ...(configs.resend_api_key
+        ? {
+            resetPasswordTokenExpiresIn: 60 * 60, // 1 hour
+            sendResetPassword: async ({
+              user,
+              url,
+            }: {
+              user: any;
+              url: string;
+              token: string;
+            }) => {
+              try {
+                const key = String(user?.email || '').toLowerCase();
+                const now = Date.now();
+                const last = recentResetEmailSentAt.get(key) || 0;
+                if (key && now - last < RESET_EMAIL_MIN_INTERVAL_MS) {
+                  return;
+                }
+                if (key) {
+                  recentResetEmailSentAt.set(key, now);
+                }
+
+                const emailService = await getEmailService(configs as any);
+                const logoUrl = envConfigs.app_logo?.startsWith('http')
+                  ? envConfigs.app_logo
+                  : `${envConfigs.app_url}${envConfigs.app_logo?.startsWith('/') ? '' : '/'}${envConfigs.app_logo || ''}`;
+                await emailService.sendEmail({
+                  to: user.email,
+                  subject: `Reset your password - ${envConfigs.app_name}`,
+                  react: ResetPasswordEmail({
+                    appName: envConfigs.app_name,
+                    logoUrl,
+                    url,
+                  }),
+                });
+              } catch (e) {
+                console.log('send reset password email failed:', e);
+              }
+            },
+          }
+        : {}),
     },
     ...(emailVerificationEnabled
       ? {

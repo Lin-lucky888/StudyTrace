@@ -84,9 +84,9 @@ export function Header({ header }: { header: HeaderType }) {
     return (
       <NavigationMenu
         viewport={false}
-        className="**:data-[slot=navigation-menu-content]:top-10 max-lg:hidden"
+        className="min-w-0 flex-1 **:data-[slot=navigation-menu-content]:top-10 max-lg:hidden"
       >
-        <NavigationMenuList className="gap-2">
+        <NavigationMenuList className="min-w-0 justify-start gap-1">
           {header.nav?.items?.map((item, idx) => {
             if (!item.children || item.children.length === 0) {
               return (
@@ -94,7 +94,7 @@ export function Header({ header }: { header: HeaderType }) {
                   <Link
                     href={item.url || ''}
                     target={item.target || '_self'}
-                    className={`flex flex-row items-center gap-2 px-4 py-1.5 text-sm ${
+                    className={`flex h-8 flex-row items-center gap-1.5 rounded-md px-2.5 py-1 text-sm whitespace-nowrap xl:px-3 ${
                       item.is_active || pathname.endsWith(item.url as string)
                         ? 'bg-muted/40 text-muted-foreground'
                         : ''
@@ -109,7 +109,7 @@ export function Header({ header }: { header: HeaderType }) {
 
             return (
               <NavigationMenuItem key={idx}>
-                <NavigationMenuTrigger className="flex flex-row items-center gap-2 text-sm">
+                <NavigationMenuTrigger className="flex h-8 flex-row items-center gap-1.5 px-2.5 text-sm whitespace-nowrap xl:px-3">
                   {item.icon && (
                     <SmartIcon name={item.icon as string} className="h-4 w-4" />
                   )}
@@ -249,11 +249,11 @@ export function Header({ header }: { header: HeaderType }) {
       <header
         data-state={isMobileMenuOpen ? 'active' : 'inactive'}
         {...(isScrolled && { 'data-scrolled': true })}
-        className="has-data-[state=open]:bg-background/50 fixed inset-x-0 top-0 z-50 has-data-[state=open]:h-screen has-data-[state=open]:backdrop-blur"
+        className="has-data-[state=open]:bg-background/50 fixed inset-x-0 top-0 z-50 h-[72px] has-data-[state=open]:h-screen has-data-[state=open]:backdrop-blur max-lg:h-14"
       >
         <div
           className={cn(
-            'absolute inset-x-0 top-0 z-50 h-18 border-transparent ring-1 ring-transparent transition-all duration-300',
+            'absolute inset-x-0 top-0 z-50 h-[72px] border-transparent ring-1 ring-transparent transition-all duration-300',
             'in-data-scrolled:border-foreground/5 in-data-scrolled:bg-background/75 in-data-scrolled:border-b in-data-scrolled:backdrop-blur',
             'has-data-[state=open]:ring-foreground/5 has-data-[state=open]:bg-card/75 has-data-[state=open]:h-[calc(var(--navigation-menu-viewport-height)+3.4rem)] has-data-[state=open]:border-b has-data-[state=open]:shadow-lg has-data-[state=open]:shadow-black/10 has-data-[state=open]:backdrop-blur',
             'max-lg:in-data-[state=active]:bg-background/75 max-lg:h-14 max-lg:overflow-hidden max-lg:border-b max-lg:in-data-[state=active]:h-screen max-lg:in-data-[state=active]:backdrop-blur'
@@ -261,9 +261,13 @@ export function Header({ header }: { header: HeaderType }) {
         >
           <div className="container">
             <div className="relative flex flex-wrap items-center justify-between lg:py-5">
-              <div className="flex justify-between gap-8 max-lg:h-14 max-lg:w-full max-lg:border-b">
+              <div className="flex min-w-0 flex-1 justify-between gap-4 max-lg:h-14 max-lg:w-full max-lg:border-b lg:items-center">
                 {/* Brand Logo */}
-                {header.brand && <BrandLogo brand={header.brand} />}
+                {header.brand && (
+                  <div className="min-w-0 shrink-0 lg:max-w-[180px] xl:max-w-none">
+                    <BrandLogo brand={header.brand} />
+                  </div>
+                )}
 
                 {/* Desktop Navigation Menu */}
                 {isLarge && <NavMenu />}
@@ -286,8 +290,8 @@ export function Header({ header }: { header: HeaderType }) {
               )}
 
               {/* Header right section: theme toggler, locale selector, sign, buttons */}
-              <div className="mb-6 hidden w-full flex-wrap items-center justify-end space-y-8 in-data-[state=active]:flex max-lg:in-data-[state=active]:mt-6 md:flex-nowrap lg:m-0 lg:flex lg:w-fit lg:gap-6 lg:space-y-0 lg:border-transparent lg:bg-transparent lg:p-0 lg:shadow-none dark:shadow-none dark:lg:bg-transparent">
-                <div className="flex w-full flex-row items-center gap-4 sm:flex-row sm:gap-6 sm:space-y-0 md:w-fit">
+              <div className="mb-6 hidden w-full flex-wrap items-center justify-end space-y-8 in-data-[state=active]:flex max-lg:in-data-[state=active]:mt-6 md:flex-nowrap lg:m-0 lg:flex lg:w-auto lg:max-w-[42%] lg:shrink-0 lg:gap-3 lg:space-y-0 lg:border-transparent lg:bg-transparent lg:p-0 lg:shadow-none xl:max-w-none dark:shadow-none dark:lg:bg-transparent">
+                <div className="flex w-full flex-row items-center gap-3 sm:flex-row sm:gap-4 sm:space-y-0 md:w-fit">
                   {header.buttons &&
                     header.buttons.map((button, idx) => (
                       <Link
@@ -296,7 +300,7 @@ export function Header({ header }: { header: HeaderType }) {
                         target={button.target || '_self'}
                         className={cn(
                           'focus-visible:ring-ring inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors focus-visible:ring-1 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50',
-                          'h-7 px-3 ring-0',
+                          'h-8 px-3 ring-0',
                           button.variant === 'outline'
                             ? 'bg-background border-primary ring-foreground/10 hover:bg-muted/50 dark:ring-foreground/15 dark:hover:bg-muted/50 border border-transparent shadow-sm ring-1 shadow-black/15 duration-200'
                             : 'bg-primary text-primary-foreground hover:bg-primary/90 border-[0.5px] border-white/25 shadow-md ring-1 shadow-black/20 ring-(--ring-color) [--ring-color:color-mix(in_oklab,var(--color-foreground)15%,var(--color-primary))]'

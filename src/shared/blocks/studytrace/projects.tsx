@@ -1,9 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useLocale, useTranslations } from 'next-intl';
 import {
   ArrowRight,
   FileText,
@@ -14,6 +13,8 @@ import {
   Sparkles,
   Trash2,
 } from 'lucide-react';
+import { useLocale, useTranslations } from 'next-intl';
+import { toast } from 'sonner';
 
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
@@ -59,6 +60,81 @@ function scoreTone(score: number) {
   return 'text-red-600';
 }
 
+function getLocalizedPath(path: string, locale: string) {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `/${locale}${normalizedPath}`;
+}
+
+// Guest workspace storage key (must match STORAGE_KEY in workspace.tsx).
+const GUEST_STORAGE_KEY = 'studytrace-workspace-v1';
+
+function readGuestSnapshot(): Record<string, any> | null {
+  try {
+    const raw = localStorage.getItem(GUEST_STORAGE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    const hasContent =
+      data?.assignmentTitle ||
+      (Array.isArray(data?.files) && data.files.length) ||
+      (Array.isArray(data?.cards) && data.cards.length) ||
+      (Array.isArray(data?.timeline) && data.timeline.length);
+    return hasContent ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Migrate guest (localStorage) workspace data into a cloud project after
+ * sign-in, so users don't lose work done before creating an account.
+ */
+async function migrateGuestSnapshot(): Promise<string | null> {
+  const data = readGuestSnapshot();
+  if (!data) return null;
+
+  const createResponse = await fetch('/api/studytrace/projects/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: data.assignmentTitle || '' }),
+  });
+  const createResult = await createResponse.json();
+  const projectId = createResult?.data?.project?.id;
+  if (!createResponse.ok || createResult.code !== 0 || !projectId) {
+    return null;
+  }
+
+  const saveResponse = await fetch('/api/studytrace/projects/save', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      projectId,
+      project: {
+        title: data.assignmentTitle || '',
+        courseName: data.courseName || '',
+        institutionPolicy: data.institutionPolicy || '',
+        concern: data.concern || '',
+        aiBoundary: data.aiBoundary || '',
+        settings: {
+          ...(data.settings && typeof data.settings === 'object'
+            ? data.settings
+            : {}),
+          submittedAt: data.submittedAt || '',
+        },
+      },
+      files: Array.isArray(data.files) ? data.files : [],
+      cards: Array.isArray(data.cards) ? data.cards : [],
+      timeline: Array.isArray(data.timeline) ? data.timeline : [],
+    }),
+  });
+  const saveResult = await saveResponse.json();
+  if (!saveResponse.ok || saveResult.code !== 0) {
+    return null;
+  }
+
+  localStorage.removeItem(GUEST_STORAGE_KEY);
+  return projectId;
+}
+
 export function StudyTraceProjects() {
   const router = useRouter();
   const t = useTranslations('studytrace');
@@ -68,6 +144,7 @@ export function StudyTraceProjects() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [isCreating, setIsCreating] = useState(false);
   const [deletingId, setDeletingId] = useState('');
+  const migrationRanRef = useRef(false);
 
   const loadProjects = useCallback(async () => {
     setIsLoading(true);
@@ -80,7 +157,32 @@ export function StudyTraceProjects() {
       const result = await response.json();
       if (response.ok && result.code === 0) {
         setAuthed(true);
-        setProjects(result.data?.list || []);
+        let list: ProjectSummary[] = result.data?.list || [];
+
+        // One-shot: pull guest localStorage work into a cloud project.
+        if (!migrationRanRef.current && readGuestSnapshot()) {
+          migrationRanRef.current = true;
+          try {
+            const migratedId = await migrateGuestSnapshot();
+            if (migratedId) {
+              toast.success(t('projects.guestMigrated'));
+              const refreshed = await fetch('/api/studytrace/projects/list', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({}),
+              });
+              const refreshedResult = await refreshed.json();
+              if (refreshed.ok && refreshedResult.code === 0) {
+                list = refreshedResult.data?.list || list;
+              }
+            }
+          } catch {
+            // Guest data stays in localStorage; retried on next visit.
+            migrationRanRef.current = false;
+          }
+        }
+
+        setProjects(list);
       } else {
         setAuthed(false);
       }
@@ -89,7 +191,7 @@ export function StudyTraceProjects() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void loadProjects();
@@ -105,7 +207,9 @@ export function StudyTraceProjects() {
       });
       const result = await response.json();
       if (response.ok && result.code === 0 && result.data?.project?.id) {
-        router.push(`/studytrace/${result.data.project.id}`);
+        router.push(
+          getLocalizedPath(`/studytrace/${result.data.project.id}`, locale)
+        );
         return;
       }
     } catch {
@@ -153,7 +257,7 @@ export function StudyTraceProjects() {
   // Guest mode: keep the local (localStorage) workspace usable without sign-in.
   if (!authed) {
     return (
-      <div>
+      <div className="pt-[72px] max-lg:pt-14">
         <div className="bg-primary/5 border-b">
           <div className="container flex flex-col gap-3 py-4 md:flex-row md:items-center md:justify-between">
             <div className="flex items-start gap-3">
@@ -168,20 +272,20 @@ export function StudyTraceProjects() {
               </div>
             </div>
             <Button asChild className="shrink-0">
-              <Link href="/sign-in">
+              <Link href={getLocalizedPath('/sign-in', locale)}>
                 <LogIn className="size-4" />
                 {t('projects.guestSignIn')}
               </Link>
             </Button>
           </div>
         </div>
-        <StudyTraceWorkspace />
+        <StudyTraceWorkspace embedded />
       </div>
     );
   }
 
   return (
-    <main className="bg-muted/20 min-h-dvh">
+    <main className="bg-muted/20 min-h-dvh pt-[72px] max-lg:pt-14">
       <section className="bg-background border-b">
         <div className="container flex flex-col gap-5 py-6 md:flex-row md:items-end md:justify-between md:py-8">
           <div className="max-w-3xl space-y-3">
@@ -256,7 +360,12 @@ export function StudyTraceProjects() {
                   </p>
                   <div className="flex items-center justify-between gap-2">
                     <Button asChild size="sm" variant="secondary">
-                      <Link href={`/studytrace/${project.id}`}>
+                      <Link
+                        href={getLocalizedPath(
+                          `/studytrace/${project.id}`,
+                          locale
+                        )}
+                      >
                         {t('projects.open')}
                         <ArrowRight className="size-4" />
                       </Link>

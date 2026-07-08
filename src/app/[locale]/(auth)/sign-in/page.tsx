@@ -4,7 +4,7 @@ import { envConfigs } from '@/config';
 import { defaultLocale } from '@/config/locale';
 import { redirect } from '@/core/i18n/navigation';
 import { SignIn } from '@/shared/blocks/sign/sign-in';
-import { getConfigs } from '@/shared/models/config';
+import { getAllConfigs, getPublicConfigs } from '@/shared/models/config';
 import { getSignUser } from '@/shared/models/user';
 
 function safeInternalPath(raw?: string) {
@@ -62,7 +62,11 @@ export default async function SignInPage({
     redirect({ href: target || '/', locale });
   }
 
-  const configs = await getConfigs();
+  const configs = await getPublicConfigs();
+
+  // Password reset needs a configured email service; expose only a boolean.
+  const allConfigs = await getAllConfigs();
+  configs.password_reset_enabled = allConfigs.resend_api_key ? 'true' : 'false';
 
   return (
     <SignIn

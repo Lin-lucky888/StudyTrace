@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useLocale, useTranslations } from 'next-intl';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -17,7 +16,6 @@ import {
   Files,
   FileText,
   History,
-  Link as LinkIcon,
   Loader2,
   Plus,
   Printer,
@@ -29,6 +27,7 @@ import {
   Trash2,
   UploadCloud,
 } from 'lucide-react';
+import { useLocale, useTranslations } from 'next-intl';
 
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
@@ -53,15 +52,26 @@ import { extractFileText } from './extract-text';
 import { exportReportPdf } from './report-pdf';
 
 type EvidenceKind =
-  | 'draft'
-  | 'source'
-  | 'ai-disclosure'
-  | 'feedback'
-  | 'version'
-  | 'process'
-  | 'other';
+  | 'paper'
+  | 'citation'
+  | 'writing-process'
+  | 'ai-use'
+  | 'school'
+  | 'appeal';
 
 type EvidenceStrength = 'strong' | 'medium' | 'weak';
+type SubmitStatus = 'ready' | 'needs-more' | 'do-not-submit';
+type TimelinePhase =
+  | 'topic'
+  | 'research'
+  | 'reading'
+  | 'draft'
+  | 'ai-assist'
+  | 'revision'
+  | 'citation-check'
+  | 'submission'
+  | 'challenge-appeal';
+type ReportVariant = 'self-check' | 'school-submission' | 'appeal-statement';
 
 type UploadedEvidenceFile = {
   id: string;
@@ -85,6 +95,10 @@ type EvidenceCard = {
   summary: string;
   notes: string;
   strength: EvidenceStrength;
+  proofTarget?: string;
+  paperLocator?: string;
+  submitStatus?: SubmitStatus;
+  actionItems?: string[];
   tags: string[];
   riskFlags: string[];
 };
@@ -96,6 +110,8 @@ type TimelineEvent = {
   detail: string;
   source: string;
   strength: EvidenceStrength;
+  phase?: TimelinePhase;
+  cardIds?: string[];
 };
 
 type StudyTraceSettings = {
@@ -119,6 +135,16 @@ type StudyTraceAnalysis = {
   providerStatus?: string;
 };
 
+type StudyTraceIngestResult = {
+  files?: {
+    id: string;
+    category: EvidenceKind;
+  }[];
+  evidenceCards: EvidenceCard[];
+  timelineEvents: TimelineEvent[];
+  providerStatus?: string;
+};
+
 type SavedReport = {
   id: string;
   title: string;
@@ -137,14 +163,52 @@ const MAX_SAVED_ANALYSIS_ITEMS = 20;
 type StudyTraceTranslator = ReturnType<typeof useTranslations>;
 
 const evidenceKindKeys: EvidenceKind[] = [
-  'draft',
-  'source',
-  'ai-disclosure',
-  'feedback',
-  'version',
-  'process',
-  'other',
+  'paper',
+  'citation',
+  'writing-process',
+  'ai-use',
+  'school',
+  'appeal',
 ];
+
+const timelinePhaseKeys: TimelinePhase[] = [
+  'topic',
+  'research',
+  'reading',
+  'draft',
+  'ai-assist',
+  'revision',
+  'citation-check',
+  'submission',
+  'challenge-appeal',
+];
+
+function getEvidenceKind(value: unknown): EvidenceKind | null {
+  const normalized =
+    typeof value === 'string'
+      ? value.trim().toLowerCase().replace(/_/g, '-')
+      : '';
+
+  const legacyMap: Record<string, EvidenceKind> = {
+    draft: 'writing-process',
+    source: 'citation',
+    'ai-disclosure': 'ai-use',
+    feedback: 'writing-process',
+    version: 'writing-process',
+    process: 'writing-process',
+    other: 'appeal',
+  };
+
+  if (legacyMap[normalized]) return legacyMap[normalized];
+
+  return evidenceKindKeys.includes(normalized as EvidenceKind)
+    ? (normalized as EvidenceKind)
+    : null;
+}
+
+function isEvidenceKind(value: unknown): value is EvidenceKind {
+  return Boolean(getEvidenceKind(value));
+}
 
 const defaultSettings: StudyTraceSettings = {
   evidenceStandard: 'balanced',
@@ -152,7 +216,14 @@ const defaultSettings: StudyTraceSettings = {
   aiPolicy: 'assistive-only',
   includeDetectorCaveat: true,
   includeCitationAudit: true,
-  requiredEvidenceKinds: ['draft', 'source', 'ai-disclosure', 'process'],
+  requiredEvidenceKinds: [
+    'paper',
+    'citation',
+    'writing-process',
+    'ai-use',
+    'school',
+    'appeal',
+  ],
 };
 
 function getInitialAnalysis(t: StudyTraceTranslator): StudyTraceAnalysis {
@@ -236,50 +307,93 @@ function guessEvidenceKind(file: File): EvidenceKind {
   const name = file.name.toLowerCase();
   const ext = getExtension(file.name);
   if (
+    name.includes('final') ||
+    name.includes('submission') ||
+    name.includes('submitted') ||
+    name.includes('essay') ||
+    name.includes('paper') ||
+    name.includes('最终') ||
+    name.includes('终稿') ||
+    name.includes('论文')
+  ) {
+    return 'paper';
+  }
+  if (
     name.includes('citation') ||
     name.includes('source') ||
     name.includes('reference') ||
     name.includes('bibliography') ||
+    name.includes('zotero') ||
+    name.includes('endnote') ||
+    name.includes('bibtex') ||
+    name.includes('ris') ||
+    ['bib', 'ris'].includes(ext) ||
     name.includes('quote') ||
     name.includes('引用') ||
-    name.includes('参考')
+    name.includes('参考') ||
+    name.includes('文献')
   ) {
-    return 'source';
+    return 'citation';
   }
   if (
     name.includes('ai') ||
     name.includes('chatgpt') ||
+    name.includes('claude') ||
+    name.includes('grammarly') ||
     name.includes('prompt') ||
-    name.includes('声明')
+    name.includes('声明') ||
+    name.includes('润色')
   ) {
-    return 'ai-disclosure';
+    return 'ai-use';
+  }
+  if (
+    name.includes('policy') ||
+    name.includes('assignment') ||
+    name.includes('brief') ||
+    name.includes('rubric') ||
+    name.includes('turnitin') ||
+    name.includes('gptzero') ||
+    name.includes('misconduct') ||
+    name.includes('notice') ||
+    name.includes('email') ||
+    name.includes('政策') ||
+    name.includes('题目') ||
+    name.includes('作业要求') ||
+    name.includes('通知') ||
+    name.includes('邮件')
+  ) {
+    return 'school';
+  }
+  if (
+    name.includes('appeal') ||
+    name.includes('statement') ||
+    name.includes('申诉') ||
+    name.includes('陈述')
+  ) {
+    return 'appeal';
   }
   if (
     name.includes('feedback') ||
     name.includes('comment') ||
-    name.includes('rubric') ||
     name.includes('批注') ||
     name.includes('反馈')
   ) {
-    return 'feedback';
+    return 'writing-process';
   }
   if (
     name.includes('history') ||
     name.includes('version') ||
+    name.includes('draft') ||
+    name.includes('outline') ||
+    name.includes('google docs') ||
+    name.includes('草稿') ||
+    name.includes('提纲') ||
     name.includes('版本') ||
     ['gdoc', 'docx', 'doc', 'pages'].includes(ext)
   ) {
-    return 'version';
+    return 'writing-process';
   }
-  if (
-    name.includes('draft') ||
-    name.includes('outline') ||
-    name.includes('草稿') ||
-    name.includes('提纲')
-  ) {
-    return 'draft';
-  }
-  return 'process';
+  return 'writing-process';
 }
 
 function truncateSavedText(value: unknown, maxLength = MAX_SAVED_TEXT_LENGTH) {
@@ -303,21 +417,36 @@ function sanitizeSavedFile(file: UploadedEvidenceFile): UploadedEvidenceFile {
     extension: truncateSavedText(file.extension, 40),
     lastModified: truncateSavedText(file.lastModified, 80),
     lastModifiedLabel: truncateSavedText(file.lastModifiedLabel, 80),
-    category: file.category,
+    category: getEvidenceKind(file.category) || 'writing-process',
     checksum: file.checksum,
   };
 }
 
+function stripExtractedTextFromFiles(
+  files: UploadedEvidenceFile[]
+): UploadedEvidenceFile[] {
+  return files.map(sanitizeSavedFile);
+}
+
 function sanitizeSavedCard(card: EvidenceCard): EvidenceCard {
+  const kind = getEvidenceKind(card.kind) || 'appeal';
+  const submitStatus = getSubmitStatus(card.submitStatus);
+
   return {
     id: card.id,
     title: truncateSavedText(card.title, 240),
-    kind: card.kind,
+    kind,
     source: truncateSavedText(card.source, 240),
     fileId: card.fileId,
     summary: truncateSavedText(card.summary),
     notes: truncateSavedText(card.notes),
     strength: card.strength,
+    proofTarget: truncateSavedText(card.proofTarget, 240),
+    paperLocator: truncateSavedText(card.paperLocator, 180),
+    submitStatus,
+    actionItems: takeSavedItems(card.actionItems).map((item) =>
+      truncateSavedText(item, 120)
+    ),
     tags: takeSavedItems(card.tags).map((tag) => truncateSavedText(tag, 80)),
     riskFlags: takeSavedItems(card.riskFlags).map((flag) =>
       truncateSavedText(flag, 160)
@@ -333,6 +462,10 @@ function sanitizeSavedTimelineEvent(event: TimelineEvent): TimelineEvent {
     detail: truncateSavedText(event.detail),
     source: truncateSavedText(event.source, 240),
     strength: event.strength,
+    phase: getTimelinePhase(event.phase) || 'draft',
+    cardIds: takeSavedItems(event.cardIds).map((id) =>
+      truncateSavedText(id, 120)
+    ),
   };
 }
 
@@ -374,9 +507,92 @@ function isQuotaExceededError(error: unknown) {
 }
 
 function strengthFromKind(kind: EvidenceKind): EvidenceStrength {
-  if (['version', 'draft', 'source'].includes(kind)) return 'strong';
-  if (['feedback', 'ai-disclosure', 'process'].includes(kind)) return 'medium';
+  if (['paper', 'citation', 'writing-process'].includes(kind)) {
+    return 'strong';
+  }
+  if (['ai-use', 'school'].includes(kind)) return 'medium';
   return 'weak';
+}
+
+function getSubmitStatus(value: unknown): SubmitStatus {
+  return value === 'ready' ||
+    value === 'needs-more' ||
+    value === 'do-not-submit'
+    ? value
+    : 'needs-more';
+}
+
+function getTimelinePhase(value: unknown): TimelinePhase | null {
+  const normalized =
+    typeof value === 'string'
+      ? value.trim().toLowerCase().replace(/_/g, '-')
+      : '';
+
+  return timelinePhaseKeys.includes(normalized as TimelinePhase)
+    ? (normalized as TimelinePhase)
+    : null;
+}
+
+function phaseFromKind(kind: EvidenceKind): TimelinePhase {
+  if (kind === 'paper') return 'submission';
+  if (kind === 'citation') return 'research';
+  if (kind === 'ai-use') return 'ai-assist';
+  if (kind === 'school') return 'topic';
+  if (kind === 'appeal') return 'challenge-appeal';
+  return 'draft';
+}
+
+function defaultProofTarget(kind: EvidenceKind, t: StudyTraceTranslator) {
+  return t(`proofTargets.${kind}`);
+}
+
+function defaultPaperLocator(kind: EvidenceKind, t: StudyTraceTranslator) {
+  return kind === 'paper'
+    ? t('workspace.cards.locatorWholePaper')
+    : t('workspace.cards.locatorToFill');
+}
+
+function defaultSubmitStatus(
+  kind: EvidenceKind,
+  strength: EvidenceStrength
+): SubmitStatus {
+  if (kind === 'appeal') return 'needs-more';
+  if (strength === 'weak') return 'needs-more';
+  return 'ready';
+}
+
+function defaultRiskFlags(kind: EvidenceKind, t: StudyTraceTranslator) {
+  const values = t.raw(`defaultRiskFlags.${kind}`) as string[];
+  return Array.isArray(values) ? values.slice(0, 2) : [];
+}
+
+function defaultActionItems(status: SubmitStatus, t: StudyTraceTranslator) {
+  const values = t.raw(`actionItems.${status}`) as string[];
+  return Array.isArray(values) ? values : [];
+}
+
+function enrichEvidenceCard(
+  card: EvidenceCard,
+  t: StudyTraceTranslator
+): EvidenceCard {
+  const kind = getEvidenceKind(card.kind) || 'appeal';
+  const strength = card.strength || strengthFromKind(kind);
+  const submitStatus = card.submitStatus || defaultSubmitStatus(kind, strength);
+
+  return {
+    ...card,
+    kind,
+    strength,
+    proofTarget: card.proofTarget || defaultProofTarget(kind, t),
+    paperLocator: card.paperLocator || defaultPaperLocator(kind, t),
+    submitStatus,
+    actionItems: card.actionItems?.length
+      ? card.actionItems
+      : defaultActionItems(submitStatus, t),
+    riskFlags: card.riskFlags?.length
+      ? card.riskFlags
+      : defaultRiskFlags(kind, t),
+  };
 }
 
 function buildCardFromFile(
@@ -388,29 +604,33 @@ function buildCardFromFile(
     ? file.extractedText.replace(/\s+/g, ' ').slice(0, 180)
     : '';
 
-  return {
-    id: newId(),
-    title: file.name,
-    kind: file.category,
-    source: t('workspace.cards.sourceUpload'),
-    fileId: file.id,
-    summary: preview
-      ? t('workspace.cards.summaryFromPreview', { kind: kindLabel, preview })
-      : t('workspace.cards.summaryFromMeta', {
-          kind: kindLabel,
-          ext: file.extension || file.type || 'unknown',
-          size: formatFileSize(file.size),
-        }),
-    notes: '',
-    strength: strengthFromKind(file.category),
-    tags: [kindLabel, file.extension || 'file'].filter(Boolean),
-    riskFlags: [],
-  };
+  return enrichEvidenceCard(
+    {
+      id: newId(),
+      title: file.name,
+      kind: file.category,
+      source: t('workspace.cards.sourceUpload'),
+      fileId: file.id,
+      summary: preview
+        ? t('workspace.cards.summaryFromPreview', { kind: kindLabel, preview })
+        : t('workspace.cards.summaryFromMeta', {
+            kind: kindLabel,
+            ext: file.extension || file.type || 'unknown',
+            size: formatFileSize(file.size),
+          }),
+      notes: '',
+      strength: strengthFromKind(file.category),
+      tags: [kindLabel, file.extension || 'file'].filter(Boolean),
+      riskFlags: [],
+    },
+    t
+  );
 }
 
 function buildTimelineFromFile(
   file: UploadedEvidenceFile,
-  t: StudyTraceTranslator
+  t: StudyTraceTranslator,
+  cardId?: string
 ): TimelineEvent {
   return {
     id: newId(),
@@ -422,7 +642,37 @@ function buildTimelineFromFile(
     }),
     source: t('workspace.timeline.sourceTimestamp'),
     strength: strengthFromKind(file.category),
+    phase: phaseFromKind(file.category),
+    cardIds: cardId ? [cardId] : [],
   };
+}
+
+function enrichTimelineEvent(event: TimelineEvent): TimelineEvent {
+  return {
+    ...event,
+    phase: getTimelinePhase(event.phase) || 'draft',
+    cardIds: Array.isArray(event.cardIds) ? event.cardIds : [],
+  };
+}
+
+function applyIngestFileCategories(
+  uploadedFiles: UploadedEvidenceFile[],
+  ingestFiles?: StudyTraceIngestResult['files']
+) {
+  if (!Array.isArray(ingestFiles) || !ingestFiles.length) {
+    return uploadedFiles;
+  }
+
+  const categoryById = new Map(
+    ingestFiles
+      .filter((file) => file?.id && isEvidenceKind(file.category))
+      .map((file) => [file.id, getEvidenceKind(file.category) || 'appeal'])
+  );
+
+  return uploadedFiles.map((file) => ({
+    ...file,
+    category: categoryById.get(file.id) || file.category,
+  }));
 }
 
 function getLocalAnalysis({
@@ -447,7 +697,11 @@ function getLocalAnalysis({
   const strongCards = cards.filter((card) => card.strength === 'strong').length;
   const chronologicalEvents = timeline.filter((event) => event.date).length;
   const boundaryReady = aiBoundary.trim().length >= 40;
-  const sourceCount = cards.filter((card) => card.kind === 'source').length;
+  const citationCount = cards.filter((card) => card.kind === 'citation').length;
+  const processCount = cards.filter(
+    (card) => card.kind === 'writing-process'
+  ).length;
+  const aiUseCount = cards.filter((card) => card.kind === 'ai-use').length;
   const listSeparator = activeDateLocale.startsWith('zh') ? '、' : ', ';
 
   const score = Math.max(
@@ -461,7 +715,9 @@ function getLocalAnalysis({
           strongCards * 5 +
           Math.min(chronologicalEvents, 8) * 4 +
           (boundaryReady ? 14 : 0) +
-          (sourceCount >= 2 ? 8 : 0) -
+          (citationCount >= 2 ? 8 : 0) +
+          (processCount >= 2 ? 6 : 0) +
+          (aiUseCount ? 4 : 0) -
           missingRequired.length * 7
       )
     )
@@ -483,7 +739,7 @@ function getLocalAnalysis({
       : t('analysis.local.riskBoundaryShort'),
   ];
 
-  if (settings.includeCitationAudit && sourceCount < 2) {
+  if (settings.includeCitationAudit && citationCount < 2) {
     riskItems.push(t('analysis.local.riskSourceShort'));
   }
 
@@ -500,10 +756,10 @@ function getLocalAnalysis({
       chronologicalEvents
         ? t('analysis.local.timelineEvents', { count: chronologicalEvents })
         : t('analysis.local.timelineNoEvents'),
-      cards.some((card) => card.kind === 'draft')
+      processCount
         ? t('analysis.local.timelineHasDraft')
         : t('analysis.local.timelineNoDraft'),
-      cards.some((card) => card.kind === 'feedback')
+      cards.some((card) => card.kind === 'school')
         ? t('analysis.local.timelineHasFeedback')
         : t('analysis.local.timelineNoFeedback'),
     ],
@@ -524,8 +780,10 @@ function getLocalAnalysis({
 
 export function StudyTraceWorkspace({
   projectId,
+  embedded = false,
 }: {
   projectId?: string;
+  embedded?: boolean;
 } = {}) {
   const t = useTranslations('studytrace');
   const locale = useLocale();
@@ -536,6 +794,7 @@ export function StudyTraceWorkspace({
 
   const [assignmentTitle, setAssignmentTitle] = useState('');
   const [courseName, setCourseName] = useState('');
+  const [submittedAt, setSubmittedAt] = useState('');
   const [institutionPolicy, setInstitutionPolicy] = useState('');
   const [concern, setConcern] = useState('');
   const [aiBoundary, setAiBoundary] = useState(() =>
@@ -560,20 +819,25 @@ export function StudyTraceWorkspace({
   const [reportHistory, setReportHistory] = useState<SavedReport[]>([]);
   const [isSavingReport, setIsSavingReport] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [reportVariant, setReportVariant] =
+    useState<ReportVariant>('school-submission');
 
   const storageKey = projectId ? `${STORAGE_KEY}:${projectId}` : STORAGE_KEY;
   const hydratedRef = useRef(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [manualCard, setManualCard] = useState({
     title: '',
-    kind: 'process' as EvidenceKind,
+    kind: 'writing-process' as EvidenceKind,
     summary: '',
     notes: '',
+    proofTarget: '',
+    paperLocator: '',
   });
   const [manualEvent, setManualEvent] = useState({
     date: toDateTimeInput(new Date()),
     label: '',
     detail: '',
+    phase: 'draft' as TimelinePhase,
   });
 
   const applyLocalSnapshot = useCallback(() => {
@@ -583,6 +847,7 @@ export function StudyTraceWorkspace({
       const data = JSON.parse(saved);
       setAssignmentTitle(data.assignmentTitle || '');
       setCourseName(data.courseName || '');
+      setSubmittedAt(data.submittedAt || '');
       setInstitutionPolicy(data.institutionPolicy || '');
       setConcern(data.concern || '');
       if (data.aiBoundary) setAiBoundary(data.aiBoundary);
@@ -597,77 +862,96 @@ export function StudyTraceWorkspace({
       );
       setSettings(data.settings || defaultSettings);
       setAnalysis(
-        data.analysis ? sanitizeSavedAnalysis(data.analysis) : getInitialAnalysis(t)
+        data.analysis
+          ? sanitizeSavedAnalysis(data.analysis)
+          : getInitialAnalysis(t)
       );
     } catch {
       localStorage.removeItem(storageKey);
     }
   }, [storageKey, t]);
 
-  const applyCloudSnapshot = useCallback((snapshot: any) => {
-    const project = snapshot?.project || {};
-    setAssignmentTitle(project.title || '');
-    setCourseName(project.courseName || '');
-    setInstitutionPolicy(project.institutionPolicy || '');
-    setConcern(project.concern || '');
-    if (typeof project.aiBoundary === 'string' && project.aiBoundary) {
-      setAiBoundary(project.aiBoundary);
-    }
-    setSettings(
-      project.settings && typeof project.settings === 'object'
-        ? { ...defaultSettings, ...project.settings }
-        : defaultSettings
-    );
-    setFiles(
-      (Array.isArray(snapshot?.files) ? snapshot.files : []).map(
-        (file: any): UploadedEvidenceFile => ({
-          id: file.id,
-          name: file.name || '',
-          size: Number(file.size) || 0,
-          type: file.type || 'unknown',
-          extension: file.extension || '',
-          lastModified: file.lastModified || '',
-          lastModifiedLabel: file.lastModified
-            ? formatDateLabel(file.lastModified)
-            : t('date.unknown'),
-          category: (file.category || 'process') as EvidenceKind,
-          extractedText: file.extractedText || undefined,
-          checksum: file.checksum || undefined,
-        })
-      )
-    );
-    setCards(
-      (Array.isArray(snapshot?.cards) ? snapshot.cards : []).map(
-        (card: any): EvidenceCard => ({
-          id: card.id,
-          title: card.title || '',
-          kind: (card.kind || 'other') as EvidenceKind,
-          source: card.source || '',
-          fileId: card.fileId || undefined,
-          summary: card.summary || '',
-          notes: card.notes || '',
-          strength: (card.strength || 'medium') as EvidenceStrength,
-          tags: Array.isArray(card.tags) ? card.tags : [],
-          riskFlags: Array.isArray(card.riskFlags) ? card.riskFlags : [],
-        })
-      )
-    );
-    setTimeline(
-      (Array.isArray(snapshot?.timeline) ? snapshot.timeline : []).map(
-        (event: any): TimelineEvent => ({
-          id: event.id,
-          date: event.date ? toDateTimeInput(event.date) : '',
-          label: event.label || '',
-          detail: event.detail || '',
-          source: event.source || t('workspace.cards.sourceManual'),
-          strength: (event.strength || 'medium') as EvidenceStrength,
-        })
-      )
-    );
-    if (snapshot?.analysis) {
-      setAnalysis(sanitizeSavedAnalysis(snapshot.analysis));
-    }
-  }, [t]);
+  const applyCloudSnapshot = useCallback(
+    (snapshot: any) => {
+      const project = snapshot?.project || {};
+      setAssignmentTitle(project.title || '');
+      setCourseName(project.courseName || '');
+      setSubmittedAt(project.settings?.submittedAt || '');
+      setInstitutionPolicy(project.institutionPolicy || '');
+      setConcern(project.concern || '');
+      if (typeof project.aiBoundary === 'string' && project.aiBoundary) {
+        setAiBoundary(project.aiBoundary);
+      }
+      setSettings(
+        project.settings && typeof project.settings === 'object'
+          ? { ...defaultSettings, ...project.settings }
+          : defaultSettings
+      );
+      setFiles(
+        (Array.isArray(snapshot?.files) ? snapshot.files : []).map(
+          (file: any): UploadedEvidenceFile => ({
+            id: file.id,
+            name: file.name || '',
+            size: Number(file.size) || 0,
+            type: file.type || 'unknown',
+            extension: file.extension || '',
+            lastModified: file.lastModified || '',
+            lastModifiedLabel: file.lastModified
+              ? formatDateLabel(file.lastModified)
+              : t('date.unknown'),
+            category: getEvidenceKind(file.category) || 'writing-process',
+            extractedText: file.extractedText || undefined,
+            checksum: file.checksum || undefined,
+          })
+        )
+      );
+      setCards(
+        (Array.isArray(snapshot?.cards) ? snapshot.cards : [])
+          .map(
+            (card: any): EvidenceCard => ({
+              id: card.id,
+              title: card.title || '',
+              kind: getEvidenceKind(card.kind) || 'appeal',
+              source: card.source || '',
+              fileId: card.fileId || undefined,
+              summary: card.summary || '',
+              notes: card.notes || '',
+              strength: (card.strength || 'medium') as EvidenceStrength,
+              proofTarget: card.proofTarget || undefined,
+              paperLocator: card.paperLocator || undefined,
+              // Keep unset so enrichEvidenceCard can derive a kind-aware default.
+              submitStatus: card.submitStatus
+                ? getSubmitStatus(card.submitStatus)
+                : undefined,
+              actionItems: Array.isArray(card.actionItems)
+                ? card.actionItems
+                : [],
+              tags: Array.isArray(card.tags) ? card.tags : [],
+              riskFlags: Array.isArray(card.riskFlags) ? card.riskFlags : [],
+            })
+          )
+          .map((card: EvidenceCard) => enrichEvidenceCard(card, t))
+      );
+      setTimeline(
+        (Array.isArray(snapshot?.timeline) ? snapshot.timeline : []).map(
+          (event: any): TimelineEvent => ({
+            id: event.id,
+            date: event.date ? toDateTimeInput(event.date) : '',
+            label: event.label || '',
+            detail: event.detail || '',
+            source: event.source || t('workspace.cards.sourceManual'),
+            strength: (event.strength || 'medium') as EvidenceStrength,
+            phase: getTimelinePhase(event.phase) || 'draft',
+            cardIds: Array.isArray(event.cardIds) ? event.cardIds : [],
+          })
+        )
+      );
+      if (snapshot?.analysis) {
+        setAnalysis(sanitizeSavedAnalysis(snapshot.analysis));
+      }
+    },
+    [t]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -733,7 +1017,10 @@ export function StudyTraceWorkspace({
         institutionPolicy,
         concern,
         aiBoundary,
-        settings,
+        settings: {
+          ...settings,
+          submittedAt,
+        },
       },
       files: files.map((file) => ({
         id: file.id,
@@ -743,7 +1030,6 @@ export function StudyTraceWorkspace({
         extension: file.extension,
         category: file.category,
         lastModified: file.lastModified,
-        extractedText: file.extractedText,
         checksum: file.checksum,
       })),
       cards: cards.map((card) => ({
@@ -755,6 +1041,10 @@ export function StudyTraceWorkspace({
         summary: card.summary,
         notes: card.notes,
         strength: card.strength,
+        proofTarget: card.proofTarget,
+        paperLocator: card.paperLocator,
+        submitStatus: card.submitStatus,
+        actionItems: card.actionItems,
         tags: card.tags,
         riskFlags: card.riskFlags,
       })),
@@ -765,12 +1055,15 @@ export function StudyTraceWorkspace({
         detail: event.detail,
         source: event.source,
         strength: event.strength,
+        phase: event.phase,
+        cardIds: event.cardIds,
       })),
     }),
     [
       projectId,
       assignmentTitle,
       courseName,
+      submittedAt,
       institutionPolicy,
       concern,
       aiBoundary,
@@ -788,6 +1081,7 @@ export function StudyTraceWorkspace({
     const snapshot = {
       assignmentTitle,
       courseName,
+      submittedAt,
       institutionPolicy: truncateSavedText(institutionPolicy),
       concern: truncateSavedText(concern),
       aiBoundary: truncateSavedText(aiBoundary),
@@ -813,6 +1107,7 @@ export function StudyTraceWorkspace({
           JSON.stringify({
             assignmentTitle,
             courseName,
+            submittedAt,
             institutionPolicy: truncateSavedText(institutionPolicy, 400),
             concern: truncateSavedText(concern, 400),
             aiBoundary: truncateSavedText(aiBoundary, 400),
@@ -830,6 +1125,7 @@ export function StudyTraceWorkspace({
     storageKey,
     assignmentTitle,
     courseName,
+    submittedAt,
     institutionPolicy,
     concern,
     aiBoundary,
@@ -838,6 +1134,7 @@ export function StudyTraceWorkspace({
     timeline,
     settings,
     analysis,
+    t,
   ]);
 
   // Debounced cloud autosave.
@@ -874,6 +1171,7 @@ export function StudyTraceWorkspace({
     buildCloudPayload,
     assignmentTitle,
     courseName,
+    submittedAt,
     institutionPolicy,
     concern,
     aiBoundary,
@@ -904,6 +1202,10 @@ export function StudyTraceWorkspace({
       ready: kinds.has(kind),
     }));
   }, [cards, settings.requiredEvidenceKinds, t]);
+  const coverageReadyCount = coverage.filter((item) => item.ready).length;
+  const coveragePercent = coverage.length
+    ? Math.round((coverageReadyCount / coverage.length) * 100)
+    : 0;
 
   const sortedTimeline = useMemo(
     () =>
@@ -915,17 +1217,80 @@ export function StudyTraceWorkspace({
     [timeline]
   );
 
+  const groupedFiles = useMemo(
+    () =>
+      evidenceKindKeys.map((kind) => ({
+        kind,
+        label: t(`evidenceKinds.${kind}`),
+        files: files.filter((file) => file.category === kind),
+      })),
+    [files, t]
+  );
+
+  const processConclusion = useMemo(() => {
+    const writingDays = new Set(
+      sortedTimeline
+        .map((event) => (event.date ? event.date.slice(0, 10) : ''))
+        .filter(Boolean)
+    ).size;
+    const draftCount = cards.filter(
+      (card) => card.kind === 'writing-process'
+    ).length;
+    const citationCount = cards.filter(
+      (card) => card.kind === 'citation'
+    ).length;
+    const aiUseCount = cards.filter((card) => card.kind === 'ai-use').length;
+
+    return t('workspace.timeline.processConclusion', {
+      days: writingDays,
+      drafts: draftCount,
+      citations: citationCount,
+      ai: aiUseCount,
+    });
+  }, [cards, sortedTimeline, t]);
+
+  const requestIngest = async (
+    uploadedFiles: UploadedEvidenceFile[]
+  ): Promise<StudyTraceIngestResult> => {
+    const response = await fetch('/api/studytrace/ingest', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        projectId,
+        locale,
+        assignment: {
+          title: assignmentTitle,
+          courseName,
+          submittedAt,
+          institutionPolicy,
+          concern,
+        },
+        files: uploadedFiles,
+        aiBoundary,
+        settings,
+      }),
+    });
+
+    const result = await response.json();
+    if (!response.ok || result.code !== 0) {
+      throw new Error(result.message || 'ingest failed');
+    }
+
+    return result.data.ingest as StudyTraceIngestResult;
+  };
+
   const handleFiles = async (incomingFiles: FileList | File[]) => {
     const list = Array.from(incomingFiles);
     if (!list.length) return;
 
     setStatusMessage(t('workspace.upload.status.organizing'));
-    const nextFiles: UploadedEvidenceFile[] = [];
-    const nextCards: EvidenceCard[] = [];
-    const nextEvents: TimelineEvent[] = [];
+    const parsedFiles: UploadedEvidenceFile[] = [];
+    const fallbackFiles: UploadedEvidenceFile[] = [];
 
     for (const [index, file] of list.entries()) {
-      const category = guessEvidenceKind(file);
+      const fallbackCategory = guessEvidenceKind(file);
       setStatusMessage(
         list.length > 1
           ? t('workspace.upload.status.parsingMulti', {
@@ -947,31 +1312,74 @@ export function StudyTraceWorkspace({
         extension: getExtension(file.name),
         lastModified: new Date(file.lastModified).toISOString(),
         lastModifiedLabel: formatDateLabel(file.lastModified),
-        category,
+        category: 'writing-process',
         extractedText,
         checksum,
       };
 
-      nextFiles.push(uploadedFile);
-      nextCards.push(buildCardFromFile(uploadedFile, t));
-      nextEvents.push(buildTimelineFromFile(uploadedFile, t));
+      parsedFiles.push(uploadedFile);
+      fallbackFiles.push({
+        ...uploadedFile,
+        category: fallbackCategory,
+      });
+    }
+
+    let nextFiles = fallbackFiles;
+    let nextCards = fallbackFiles.map((file) => buildCardFromFile(file, t));
+    let cardByFileId = new Map(nextCards.map((card) => [card.fileId, card]));
+    let nextEvents = fallbackFiles.map((file) =>
+      buildTimelineFromFile(file, t, cardByFileId.get(file.id)?.id)
+    );
+    let nextStatus = t('workspace.upload.status.localGenerated', {
+      count: nextCards.length,
+    });
+
+    try {
+      setStatusMessage(t('workspace.upload.status.ingesting'));
+      const ingest = await requestIngest(parsedFiles);
+
+      if (ingest.evidenceCards?.length) {
+        nextFiles = applyIngestFileCategories(parsedFiles, ingest.files);
+        nextCards = ingest.evidenceCards.map((card) =>
+          enrichEvidenceCard(card, t)
+        );
+        cardByFileId = new Map(nextCards.map((card) => [card.fileId, card]));
+        nextEvents = ingest.timelineEvents?.length
+          ? ingest.timelineEvents.map(enrichTimelineEvent)
+          : nextFiles.map((file) =>
+              buildTimelineFromFile(file, t, cardByFileId.get(file.id)?.id)
+            );
+        nextStatus = t('workspace.upload.status.aiGenerated', {
+          cards: nextCards.length,
+          events: nextEvents.length,
+        });
+      }
+    } catch (error) {
+      nextStatus =
+        error instanceof Error && error.message.includes('auth')
+          ? t('workspace.upload.status.needAuth')
+          : error instanceof Error && error.message.includes('credits')
+            ? t('workspace.upload.status.needCredits')
+            : t('workspace.upload.status.unavailable');
     }
 
     setFiles((prev) => [...nextFiles, ...prev]);
     setCards((prev) => [...nextCards, ...prev]);
     setTimeline((prev) => [...nextEvents, ...prev]);
-    setAnalysis(
-      getLocalAnalysis({
-        files: [...nextFiles, ...files],
-        cards: [...nextCards, ...cards],
-        timeline: [...nextEvents, ...timeline],
-        aiBoundary,
-        settings,
-        t,
-      })
-    );
+    const nextAnalysis = getLocalAnalysis({
+      files: [...nextFiles, ...files],
+      cards: [...nextCards, ...cards],
+      timeline: [...nextEvents, ...timeline],
+      aiBoundary,
+      settings,
+      t,
+    });
+
+    setAnalysis(nextAnalysis);
     setStatusMessage(
-      t('workspace.upload.status.generated', { count: nextCards.length })
+      `${nextStatus} ${t('workspace.upload.status.reportReady', {
+        score: nextAnalysis.trustScore,
+      })}`
     );
     setActiveTab('cards');
   };
@@ -984,24 +1392,31 @@ export function StudyTraceWorkspace({
 
     const kind = manualCard.kind;
     const kindLabel = t(`evidenceKinds.${kind}`);
-    const card: EvidenceCard = {
-      id: newId(),
-      title: manualCard.title || kindLabel,
-      kind,
-      source: t('workspace.cards.sourceManual'),
-      summary: manualCard.summary,
-      notes: manualCard.notes,
-      strength: strengthFromKind(kind),
-      tags: [kindLabel],
-      riskFlags: [],
-    };
+    const card = enrichEvidenceCard(
+      {
+        id: newId(),
+        title: manualCard.title || kindLabel,
+        kind,
+        source: t('workspace.cards.sourceManual'),
+        summary: manualCard.summary,
+        notes: manualCard.notes,
+        proofTarget: manualCard.proofTarget,
+        paperLocator: manualCard.paperLocator,
+        strength: strengthFromKind(kind),
+        tags: [kindLabel],
+        riskFlags: [],
+      },
+      t
+    );
 
     setCards((prev) => [card, ...prev]);
     setManualCard({
       title: '',
-      kind: 'process',
+      kind: 'writing-process',
       summary: '',
       notes: '',
+      proofTarget: '',
+      paperLocator: '',
     });
     setStatusMessage(t('workspace.cards.added'));
   };
@@ -1020,6 +1435,8 @@ export function StudyTraceWorkspace({
         detail: manualEvent.detail,
         source: t('workspace.cards.sourceManual'),
         strength: 'medium',
+        phase: manualEvent.phase,
+        cardIds: [],
       },
       ...prev,
     ]);
@@ -1027,6 +1444,7 @@ export function StudyTraceWorkspace({
       date: toDateTimeInput(new Date()),
       label: '',
       detail: '',
+      phase: 'draft',
     });
     setStatusMessage(t('workspace.timeline.added'));
   };
@@ -1076,10 +1494,11 @@ export function StudyTraceWorkspace({
           assignment: {
             title: assignmentTitle,
             courseName,
+            submittedAt,
             institutionPolicy,
             concern,
           },
-          files,
+          files: stripExtractedTextFromFiles(files),
           evidenceCards: cards,
           timelineEvents: sortedTimeline,
           aiBoundary,
@@ -1116,17 +1535,27 @@ export function StudyTraceWorkspace({
   };
 
   const report = useMemo(() => {
-    const evidenceLines = cards
+    const reportCards =
+      reportVariant === 'school-submission'
+        ? cards.filter((card) => card.submitStatus === 'ready')
+        : cards;
+    const showInternalRisks = reportVariant !== 'school-submission';
+
+    const evidenceLines = reportCards
       .map(
         (card, index) =>
-          `${index + 1}. ${card.title} | ${t(`evidenceKinds.${card.kind}`)} | ${t('reportDoc.credibility')}: ${t(`strength.${card.strength}`)}\n   - ${card.summary || t('reportDoc.noSummary')}\n   - ${t('reportDoc.notesLabel')}: ${card.notes || t('reportDoc.empty')}`
+          `${index + 1}. ${card.title} | ${t(`evidenceKinds.${card.kind}`)} | ${t('reportDoc.credibility')}: ${t(`strength.${card.strength}`)}\n   - ${t('reportDoc.proofTarget')}: ${card.proofTarget || t('reportDoc.empty')}\n   - ${t('reportDoc.paperLocator')}: ${card.paperLocator || t('reportDoc.empty')}\n   - ${t('reportDoc.submitStatus')}: ${card.submitStatus ? t(`submitStatus.${card.submitStatus}`) : t('reportDoc.empty')}\n   - ${card.summary || t('reportDoc.noSummary')}\n   - ${t('reportDoc.notesLabel')}: ${card.notes || t('reportDoc.empty')}${
+            showInternalRisks && card.riskFlags?.length
+              ? `\n   - ${t('reportDoc.cardRisks')}: ${card.riskFlags.join('; ')}`
+              : ''
+          }`
       )
       .join('\n');
 
     const timelineLines = sortedTimeline
       .map(
         (event, index) =>
-          `${index + 1}. ${event.date ? formatDateLabel(event.date) : t('date.empty')} | ${event.label}\n   - ${event.detail || t('reportDoc.empty')}\n   - ${t('reportDoc.sourceLabel')}: ${event.source}`
+          `${index + 1}. ${event.date ? formatDateLabel(event.date) : t('date.empty')} | ${event.label}\n   - ${t('reportDoc.phase')}: ${event.phase ? t(`timelinePhases.${event.phase}`) : t('reportDoc.empty')}\n   - ${event.detail || t('reportDoc.empty')}\n   - ${t('reportDoc.sourceLabel')}: ${event.source}`
       )
       .join('\n');
 
@@ -1138,25 +1567,53 @@ export function StudyTraceWorkspace({
       .join('\n');
 
     const notFilled = t('reportDoc.notFilled');
+    const citationCards = cards.filter((card) => card.kind === 'citation');
+    const aiUseCards = cards.filter((card) => card.kind === 'ai-use');
+    const riskSection = showInternalRisks
+      ? `
+## ${t('reportDoc.riskHeading')}
 
-    return `# ${t('reportDoc.title')}
+${analysis.riskItems.map((item) => `- ${item}`).join('\n')}
+
+## ${t('reportDoc.gapsHeading')}
+
+${analysis.evidenceGaps.map((item) => `- ${item}`).join('\n')}
+`
+      : '';
+    const checklistSection =
+      reportVariant === 'self-check'
+        ? `
+## ${t('reportDoc.checklistHeading')}
+
+${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
+`
+        : '';
+
+    return `# ${t(`reportDoc.variantTitles.${reportVariant}`)}
 
 ## ${t('reportDoc.basicHeading')}
 
 - ${t('reportDoc.assignment')}: ${assignmentTitle || notFilled}
 - ${t('reportDoc.course')}: ${courseName || notFilled}
+- ${t('reportDoc.submissionTime')}: ${submittedAt ? formatDateLabel(submittedAt) : notFilled}
 - ${t('reportDoc.concern')}: ${concern || notFilled}
 - ${t('reportDoc.policy')}: ${institutionPolicy || notFilled}
 
 ## ${t('reportDoc.summaryHeading')}
 
-${t('reportDoc.trustScore', { score: analysis.trustScore })}
+${reportVariant === 'school-submission' ? processConclusion : t('reportDoc.trustScore', { score: analysis.trustScore })}
 
 ${analysis.summary}
+
+## ${t('reportDoc.citationSummaryHeading')}
+
+${citationCards.length ? t('reportDoc.citationSummary', { count: citationCards.length }) : t('reportDoc.noCitationSummary')}
 
 ## ${t('reportDoc.aiBoundaryHeading')}
 
 ${analysis.aiBoundaryStatement || aiBoundary || notFilled}
+
+${aiUseCards.length ? t('reportDoc.aiUseSummary', { count: aiUseCards.length }) : t('reportDoc.noAiUseSummary')}
 
 ## ${t('reportDoc.cardsHeading')}
 
@@ -1172,21 +1629,17 @@ ${t('reportDoc.fingerprintNote')}
 
 ${fingerprintLines || t('reportDoc.noFiles')}
 
-## ${t('reportDoc.riskHeading')}
-
-${analysis.riskItems.map((item) => `- ${item}`).join('\n')}
-
-## ${t('reportDoc.gapsHeading')}
-
-${analysis.evidenceGaps.map((item) => `- ${item}`).join('\n')}
+${riskSection}
 
 ## ${t('reportDoc.appealHeading')}
 
 ${analysis.appealOutline.map((item, index) => `${index + 1}. ${item}`).join('\n')}
 
-## ${t('reportDoc.checklistHeading')}
+${checklistSection}
 
-${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
+## ${t('reportDoc.disclaimerHeading')}
+
+${t('reportDoc.disclaimer')}
 `;
   }, [
     aiBoundary,
@@ -1197,7 +1650,10 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
     courseName,
     files,
     institutionPolicy,
+    processConclusion,
+    reportVariant,
     sortedTimeline,
+    submittedAt,
     t,
   ]);
 
@@ -1341,6 +1797,7 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
   const resetWorkspace = () => {
     setAssignmentTitle('');
     setCourseName('');
+    setSubmittedAt('');
     setInstitutionPolicy('');
     setConcern('');
     setAiBoundary(t('aiBoundaryDefaultInput'));
@@ -1354,7 +1811,12 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
 
   if (isLoading) {
     return (
-      <main className="bg-muted/20 flex min-h-dvh items-center justify-center">
+      <main
+        className={cn(
+          'bg-muted/20 flex min-h-dvh items-center justify-center',
+          !embedded && 'pt-[72px] max-lg:pt-14'
+        )}
+      >
         <div className="text-muted-foreground flex items-center gap-3 text-sm">
           <Loader2 className="size-5 animate-spin" />
           {t('workspace.loading')}
@@ -1364,7 +1826,12 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
   }
 
   return (
-    <main className="bg-muted/20 min-h-dvh">
+    <main
+      className={cn(
+        'bg-muted/20 min-h-dvh',
+        !embedded && 'pt-[72px] max-lg:pt-14'
+      )}
+    >
       <style>{`
         @media print {
           body * { visibility: hidden; }
@@ -1381,7 +1848,7 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
         }
       `}</style>
 
-      <section className="bg-background border-b">
+      <section className="from-background to-muted/45 border-b bg-gradient-to-b">
         <div className="container py-6 md:py-8">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-3xl space-y-3">
@@ -1429,13 +1896,42 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                   {t('workspace.subtitle')}
                 </p>
               </div>
+              <div className="grid max-w-3xl gap-2 sm:grid-cols-3">
+                {[
+                  {
+                    icon: <UploadCloud className="size-4" />,
+                    text: t('workspace.quick.upload'),
+                  },
+                  {
+                    icon: <Sparkles className="size-4" />,
+                    text: t('workspace.quick.organize'),
+                  },
+                  {
+                    icon: <FileDown className="size-4" />,
+                    text: t('workspace.quick.export'),
+                  },
+                ].map((item) => (
+                  <div
+                    key={item.text}
+                    className="bg-background/80 text-muted-foreground flex items-center gap-2 rounded-md border px-3 py-2 text-sm shadow-sm"
+                  >
+                    <span className="text-primary">{item.icon}</span>
+                    <span>{item.text}</span>
+                  </div>
+                ))}
+              </div>
             </div>
 
-            <div className="bg-card grid grid-cols-3 gap-2 rounded-md border p-2 text-center shadow-sm md:min-w-[360px]">
+            <div className="bg-card grid grid-cols-2 gap-2 rounded-md border p-2 text-center shadow-sm md:grid-cols-4 lg:min-w-[460px]">
               <Metric label={t('workspace.metricCards')} value={cards.length} />
               <Metric
                 label={t('workspace.metricEvents')}
                 value={timeline.length}
+              />
+              <Metric
+                label={t('workspace.metricCoverage')}
+                value={coveragePercent}
+                suffix="%"
               />
               <Metric
                 label={t('workspace.metricScore')}
@@ -1470,6 +1966,13 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                   value={courseName}
                   onChange={(event) => setCourseName(event.target.value)}
                   placeholder={t('workspace.basic.coursePlaceholder')}
+                />
+              </Field>
+              <Field label={t('workspace.basic.submittedAt')}>
+                <Input
+                  type="datetime-local"
+                  value={submittedAt}
+                  onChange={(event) => setSubmittedAt(event.target.value)}
                 />
               </Field>
               <Field label={t('workspace.basic.concern')}>
@@ -1515,8 +2018,12 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="studytrace-no-print grid h-auto w-full grid-cols-2 gap-1 md:grid-cols-5">
-              <TabsTrigger value="upload">{t('workspace.tabs.upload')}</TabsTrigger>
-              <TabsTrigger value="cards">{t('workspace.tabs.cards')}</TabsTrigger>
+              <TabsTrigger value="upload">
+                {t('workspace.tabs.upload')}
+              </TabsTrigger>
+              <TabsTrigger value="cards">
+                {t('workspace.tabs.cards')}
+              </TabsTrigger>
               <TabsTrigger value="timeline">
                 {t('workspace.tabs.timeline')}
               </TabsTrigger>
@@ -1538,11 +2045,23 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                    {(
+                      t.raw('workspace.upload.acceptedMaterials') as string[]
+                    ).map((item) => (
+                      <div
+                        key={item}
+                        className="bg-muted/30 text-muted-foreground rounded-md border px-3 py-2 text-sm"
+                      >
+                        {item}
+                      </div>
+                    ))}
+                  </div>
                   <label
                     htmlFor="studytrace-files"
-                    className="bg-muted/30 hover:bg-muted/50 flex min-h-[220px] cursor-pointer flex-col items-center justify-center gap-4 rounded-lg border border-dashed px-4 text-center transition"
+                    className="bg-background hover:bg-muted/35 group flex min-h-[240px] cursor-pointer flex-col items-center justify-center gap-4 rounded-lg border border-dashed px-4 text-center shadow-sm transition"
                   >
-                    <div className="bg-background rounded-md border p-3 shadow-sm">
+                    <div className="bg-primary/10 text-primary rounded-md border p-3 shadow-sm transition-transform group-hover:scale-105">
                       <Files className="text-primary size-8" />
                     </div>
                     <div className="space-y-1">
@@ -1552,6 +2071,9 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                       <p className="text-muted-foreground max-w-xl text-sm leading-6">
                         {t('workspace.upload.dropDesc')}
                       </p>
+                    </div>
+                    <div className="bg-primary/5 text-primary rounded-md border px-3 py-2 text-sm font-medium">
+                      {t('workspace.upload.autoDesc')}
                     </div>
                     <input
                       id="studytrace-files"
@@ -1567,58 +2089,75 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                     />
                   </label>
 
-                  <div className="grid gap-3">
+                  <div className="grid gap-3 md:grid-cols-2">
                     {files.length ? (
-                      files.map((file) => (
+                      groupedFiles.map((group) => (
                         <div
-                          key={file.id}
-                          className="bg-background grid gap-3 rounded-lg border p-4 md:grid-cols-[1fr_auto]"
+                          key={group.kind}
+                          className="bg-background rounded-lg border p-4"
                         >
-                          <div className="min-w-0 space-y-2">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <FileText className="text-muted-foreground size-4" />
-                              <span className="font-medium break-all">
-                                {file.name}
-                              </span>
-                              <Badge variant="outline">
-                                {t(`evidenceKinds.${file.category}`)}
-                              </Badge>
+                          <div className="mb-3 flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 font-medium">
+                              <FileText className="text-primary size-4" />
+                              {group.label}
                             </div>
-                            <p className="text-muted-foreground text-sm">
-                              {formatFileSize(file.size)} ·{' '}
-                              {file.type || 'unknown'} ·{' '}
-                              {t('workspace.upload.lastModified')}{' '}
-                              {file.lastModifiedLabel}
-                            </p>
-                            {file.checksum ? (
-                              <p
-                                className="text-muted-foreground font-mono text-xs break-all"
-                                title={file.checksum}
-                              >
-                                {t('workspace.upload.fingerprint')}{' '}
-                                {shortChecksum(file.checksum)}
-                              </p>
-                            ) : null}
-                            {file.extractedText ? (
-                              <p className="text-muted-foreground line-clamp-2 text-sm">
-                                {file.extractedText
-                                  .replace(/\s+/g, ' ')
-                                  .slice(0, 220)}
-                              </p>
-                            ) : null}
+                            <Badge variant="outline">
+                              {t('workspace.upload.categoryCount', {
+                                count: group.files.length,
+                              })}
+                            </Badge>
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label={t('workspace.upload.deleteAria')}
-                            onClick={() =>
-                              setFiles((prev) =>
-                                prev.filter((item) => item.id !== file.id)
-                              )
-                            }
-                          >
-                            <Trash2 className="size-4" />
-                          </Button>
+                          {group.files.length ? (
+                            <div className="space-y-3">
+                              {group.files.map((file) => (
+                                <div
+                                  key={file.id}
+                                  className="grid gap-3 rounded-md border p-3 md:grid-cols-[1fr_auto]"
+                                >
+                                  <div className="min-w-0 space-y-2">
+                                    <div className="font-medium break-all">
+                                      {file.name}
+                                    </div>
+                                    <p className="text-muted-foreground text-xs">
+                                      {formatFileSize(file.size)} ·{' '}
+                                      {file.type || 'unknown'} ·{' '}
+                                      {t('workspace.upload.lastModified')}{' '}
+                                      {file.lastModifiedLabel}
+                                    </p>
+                                    {file.checksum ? (
+                                      <p
+                                        className="text-muted-foreground font-mono text-xs break-all"
+                                        title={file.checksum}
+                                      >
+                                        {t('workspace.upload.fingerprint')}{' '}
+                                        {shortChecksum(file.checksum)}
+                                      </p>
+                                    ) : null}
+                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    aria-label={t(
+                                      'workspace.upload.deleteAria'
+                                    )}
+                                    onClick={() =>
+                                      setFiles((prev) =>
+                                        prev.filter(
+                                          (item) => item.id !== file.id
+                                        )
+                                      )
+                                    }
+                                  >
+                                    <Trash2 className="size-4" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-muted-foreground rounded-md border border-dashed p-3 text-sm">
+                              {t('workspace.upload.emptyGroup')}
+                            </p>
+                          )}
                         </div>
                       ))
                     ) : (
@@ -1682,7 +2221,37 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                             summary: event.target.value,
                           }))
                         }
-                        placeholder={t('workspace.cards.formSummaryPlaceholder')}
+                        placeholder={t(
+                          'workspace.cards.formSummaryPlaceholder'
+                        )}
+                      />
+                    </Field>
+                    <Field label={t('workspace.cards.proofTarget')}>
+                      <Input
+                        value={manualCard.proofTarget}
+                        onChange={(event) =>
+                          setManualCard((prev) => ({
+                            ...prev,
+                            proofTarget: event.target.value,
+                          }))
+                        }
+                        placeholder={t(
+                          'workspace.cards.proofTargetPlaceholder'
+                        )}
+                      />
+                    </Field>
+                    <Field label={t('workspace.cards.paperLocator')}>
+                      <Input
+                        value={manualCard.paperLocator}
+                        onChange={(event) =>
+                          setManualCard((prev) => ({
+                            ...prev,
+                            paperLocator: event.target.value,
+                          }))
+                        }
+                        placeholder={t(
+                          'workspace.cards.paperLocatorPlaceholder'
+                        )}
                       />
                     </Field>
                     <Field
@@ -1713,7 +2282,14 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                       cards.map((card) => (
                         <div
                           key={card.id}
-                          className="bg-background rounded-lg border p-4"
+                          className={cn(
+                            'bg-background rounded-lg border-l-4 p-4 shadow-sm',
+                            card.submitStatus === 'ready'
+                              ? 'border-l-green-600'
+                              : card.submitStatus === 'do-not-submit'
+                                ? 'border-l-red-500'
+                                : 'border-l-amber-500'
+                          )}
                         >
                           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                             <div className="min-w-0 space-y-2">
@@ -1722,6 +2298,7 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                                   {t(`evidenceKinds.${card.kind}`)}
                                 </Badge>
                                 <StrengthBadge strength={card.strength} />
+                                <SubmitBadge status={card.submitStatus} />
                                 <span className="font-medium break-words">
                                   {card.title}
                                 </span>
@@ -1731,6 +2308,26 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                                   source: card.source,
                                 })}
                               </p>
+                              <div className="grid gap-2 text-sm md:grid-cols-2">
+                                <div className="bg-muted/20 rounded-md border p-3">
+                                  <div className="text-muted-foreground text-xs">
+                                    {t('workspace.cards.proofTarget')}
+                                  </div>
+                                  <div className="mt-1 font-medium">
+                                    {card.proofTarget ||
+                                      t('workspace.cards.notSpecified')}
+                                  </div>
+                                </div>
+                                <div className="bg-muted/20 rounded-md border p-3">
+                                  <div className="text-muted-foreground text-xs">
+                                    {t('workspace.cards.paperLocator')}
+                                  </div>
+                                  <div className="mt-1 font-medium">
+                                    {card.paperLocator ||
+                                      t('workspace.cards.notSpecified')}
+                                  </div>
+                                </div>
+                              </div>
                             </div>
                             <Button
                               variant="ghost"
@@ -1752,6 +2349,50 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                                 }
                               />
                             </Field>
+                            <Field label={t('workspace.cards.proofTarget')}>
+                              <Input
+                                value={card.proofTarget || ''}
+                                onChange={(event) =>
+                                  updateCard(card.id, {
+                                    proofTarget: event.target.value,
+                                  })
+                                }
+                              />
+                            </Field>
+                            <Field label={t('workspace.cards.paperLocator')}>
+                              <Input
+                                value={card.paperLocator || ''}
+                                onChange={(event) =>
+                                  updateCard(card.id, {
+                                    paperLocator: event.target.value,
+                                  })
+                                }
+                              />
+                            </Field>
+                            <Field label={t('workspace.cards.submitStatus')}>
+                              <select
+                                value={card.submitStatus || 'needs-more'}
+                                onChange={(event) =>
+                                  updateCard(card.id, {
+                                    submitStatus: event.target
+                                      .value as SubmitStatus,
+                                  })
+                                }
+                                className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+                              >
+                                {(
+                                  [
+                                    'ready',
+                                    'needs-more',
+                                    'do-not-submit',
+                                  ] as SubmitStatus[]
+                                ).map((value) => (
+                                  <option key={value} value={value}>
+                                    {t(`submitStatus.${value}`)}
+                                  </option>
+                                ))}
+                              </select>
+                            </Field>
                             <Field label={t('workspace.cards.formNotes')}>
                               <Textarea
                                 value={card.notes}
@@ -1762,6 +2403,39 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                                 }
                               />
                             </Field>
+                          </div>
+                          <div className="mt-4 grid gap-3 md:grid-cols-2">
+                            <div className="rounded-md border p-3">
+                              <div className="mb-2 text-sm font-medium">
+                                {t('workspace.cards.riskFlags')}
+                              </div>
+                              <ul className="text-muted-foreground space-y-1 text-sm">
+                                {(card.riskFlags?.length
+                                  ? card.riskFlags
+                                  : [t('workspace.cards.noRiskFlags')]
+                                ).map((item) => (
+                                  <li key={item}>- {item}</li>
+                                ))}
+                              </ul>
+                            </div>
+                            <div className="rounded-md border p-3">
+                              <div className="mb-2 text-sm font-medium">
+                                {t('workspace.cards.actions')}
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {(card.actionItems?.length
+                                  ? card.actionItems
+                                  : defaultActionItems(
+                                      card.submitStatus || 'needs-more',
+                                      t
+                                    )
+                                ).map((item) => (
+                                  <Badge key={item} variant="secondary">
+                                    {item}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
                           </div>
                         </div>
                       ))
@@ -1785,6 +2459,20 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  <div className="bg-primary/5 rounded-md border p-4">
+                    <div className="flex items-start gap-3">
+                      <ShieldCheck className="text-primary mt-0.5 size-5" />
+                      <div>
+                        <div className="text-sm font-medium">
+                          {t('workspace.timeline.processConclusionTitle')}
+                        </div>
+                        <p className="text-muted-foreground mt-1 text-sm leading-6">
+                          {processConclusion}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="bg-muted/20 grid gap-3 rounded-lg border p-4 md:grid-cols-[220px_1fr]">
                     <Field label={t('workspace.timeline.time')}>
                       <Input
@@ -1809,6 +2497,24 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                         }
                         placeholder={t('workspace.timeline.labelPlaceholder')}
                       />
+                    </Field>
+                    <Field label={t('workspace.timeline.phase')}>
+                      <select
+                        value={manualEvent.phase}
+                        onChange={(event) =>
+                          setManualEvent((prev) => ({
+                            ...prev,
+                            phase: event.target.value as TimelinePhase,
+                          }))
+                        }
+                        className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+                      >
+                        {timelinePhaseKeys.map((value) => (
+                          <option key={value} value={value}>
+                            {t(`timelinePhases.${value}`)}
+                          </option>
+                        ))}
+                      </select>
                     </Field>
                     <Field
                       label={t('workspace.timeline.detail')}
@@ -1846,6 +2552,11 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                           <div className="space-y-1">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="font-medium">{event.label}</span>
+                              <Badge variant="outline">
+                                {event.phase
+                                  ? t(`timelinePhases.${event.phase}`)
+                                  : t('workspace.timeline.phaseUnknown')}
+                              </Badge>
                               <StrengthBadge strength={event.strength} />
                             </div>
                             <p className="text-muted-foreground text-sm">
@@ -1855,6 +2566,13 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                               · {event.source}
                             </p>
                             <p className="text-sm leading-6">{event.detail}</p>
+                            {event.cardIds?.length ? (
+                              <p className="text-muted-foreground text-xs">
+                                {t('workspace.timeline.linkedCards', {
+                                  count: event.cardIds.length,
+                                })}
+                              </p>
+                            ) : null}
                           </div>
                           <Button
                             variant="ghost"
@@ -1895,6 +2613,25 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                         {analysis.summary || localAnalysis.summary}
                       </p>
                     </div>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-5">
+                    {(
+                      t.raw('workspace.risk.dimensions') as {
+                        title: string;
+                        desc: string;
+                      }[]
+                    ).map((item) => (
+                      <div
+                        key={item.title}
+                        className="bg-background rounded-lg border p-3"
+                      >
+                        <div className="text-sm font-medium">{item.title}</div>
+                        <p className="text-muted-foreground mt-2 text-xs leading-5">
+                          {item.desc}
+                        </p>
+                      </div>
+                    ))}
                   </div>
 
                   <InsightList
@@ -1949,6 +2686,35 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  <div className="studytrace-no-print grid gap-3 md:grid-cols-3">
+                    {(
+                      [
+                        'self-check',
+                        'school-submission',
+                        'appeal-statement',
+                      ] as ReportVariant[]
+                    ).map((variant) => (
+                      <button
+                        key={variant}
+                        type="button"
+                        onClick={() => setReportVariant(variant)}
+                        className={cn(
+                          'rounded-lg border p-4 text-left transition',
+                          reportVariant === variant
+                            ? 'border-primary bg-primary/5 shadow-sm'
+                            : 'bg-background hover:bg-muted/40'
+                        )}
+                      >
+                        <div className="font-medium">
+                          {t(`workspace.report.variants.${variant}.title`)}
+                        </div>
+                        <p className="text-muted-foreground mt-2 text-sm leading-6">
+                          {t(`workspace.report.variants.${variant}.desc`)}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+
                   <div className="studytrace-no-print flex flex-wrap gap-2">
                     <Button onClick={runAnalysis} disabled={isAnalyzing}>
                       {isAnalyzing ? (
@@ -2008,14 +2774,13 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                           {t('workspace.report.cardHeading')}
                         </h2>
                         <p className="text-muted-foreground text-sm">
-                          {assignmentTitle || t('workspace.report.noAssignment')}{' '}
+                          {assignmentTitle ||
+                            t('workspace.report.noAssignment')}{' '}
                           · {courseName || t('workspace.report.noCourse')}
                         </p>
                       </div>
                       <Badge variant="outline">
-                        {t('workspace.report.scoreBadge', {
-                          score: analysis.trustScore,
-                        })}
+                        {t(`workspace.report.variants.${reportVariant}.title`)}
                       </Badge>
                     </div>
                     <pre className="text-foreground p-0 text-sm leading-7 break-words whitespace-pre-wrap">
@@ -2043,7 +2808,8 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                             >
                               <div className="min-w-0">
                                 <div className="truncate text-sm font-medium">
-                                  {item.title || t('workspace.report.unnamedReport')}
+                                  {item.title ||
+                                    t('workspace.report.unnamedReport')}
                                 </div>
                                 <div className="text-muted-foreground text-xs">
                                   {formatDateLabel(item.createdAt)} ·{' '}
@@ -2083,6 +2849,23 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    {t('workspace.sidebar.coverageProgress', {
+                      ready: coverageReadyCount,
+                      total: coverage.length,
+                    })}
+                  </span>
+                  <span className="font-medium">{coveragePercent}%</span>
+                </div>
+                <div className="bg-muted h-2 overflow-hidden rounded-full">
+                  <div
+                    className="bg-primary h-full rounded-full transition-all"
+                    style={{ width: `${coveragePercent}%` }}
+                  />
+                </div>
+              </div>
               {coverage.map((item) => (
                 <div
                   key={item.kind}
@@ -2220,34 +3003,6 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
             </CardContent>
           </Card>
 
-          <Card className="rounded-lg">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <LinkIcon className="size-4" />
-                {t('workspace.sidebar.referencesTitle')}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {(
-                t.raw('marketSignals') as {
-                  name: string;
-                  source: string;
-                  detail: string;
-                }[]
-              ).map((signal) => (
-                <div key={signal.name} className="rounded-md border p-3">
-                  <div className="font-medium">{signal.name}</div>
-                  <div className="text-muted-foreground mt-1 text-xs">
-                    {signal.source}
-                  </div>
-                  <p className="text-muted-foreground mt-2 text-sm leading-6">
-                    {signal.detail}
-                  </p>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
           <Button variant="ghost" className="w-full" onClick={resetWorkspace}>
             <Trash2 className="size-4" />
             {t('workspace.sidebar.reset')}
@@ -2304,6 +3059,23 @@ function StrengthBadge({ strength }: { strength: EvidenceStrength }) {
       className={cn(strength === 'weak' && 'border-amber-300 text-amber-700')}
     >
       {label}
+    </Badge>
+  );
+}
+
+function SubmitBadge({ status }: { status?: SubmitStatus }) {
+  const t = useTranslations('studytrace');
+  const value = status || 'needs-more';
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        value === 'ready' && 'border-green-300 text-green-700',
+        value === 'needs-more' && 'border-amber-300 text-amber-700',
+        value === 'do-not-submit' && 'border-red-300 text-red-700'
+      )}
+    >
+      {t(`submitStatus.${value}`)}
     </Badge>
   );
 }

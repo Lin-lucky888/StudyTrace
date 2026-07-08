@@ -26,6 +26,11 @@
         "title": "API Keys",
         "url": "/settings/apikeys",
         "icon": "RiKeyLine"
+      },
+      {
+        "title": "Security",
+        "url": "/settings/security",
+        "icon": "Shield"
       }
     ]
   },

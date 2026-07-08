@@ -5,19 +5,17 @@ import createIntlMiddleware from 'next-intl/middleware';
 import { routing } from '@/core/i18n/config';
 
 const intlMiddleware = createIntlMiddleware(routing);
+const NEXT_INTL_LOCALE_HEADER = 'X-NEXT-INTL-LOCALE';
 
 export async function proxy(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-
-  // Handle internationalization first
-  const intlResponse = intlMiddleware(request);
+  const originalPathname = request.nextUrl.pathname;
 
   // Extract locale from pathname
-  const locale = pathname.split('/')[1];
+  const locale = originalPathname.split('/')[1];
   const isValidLocale = routing.locales.includes(locale as any);
   const pathWithoutLocale = isValidLocale
-    ? pathname.slice(locale.length + 1)
-    : pathname;
+    ? originalPathname.slice(locale.length + 1) || '/'
+    : originalPathname;
 
   // Only check authentication for admin routes
   if (
@@ -47,12 +45,30 @@ export async function proxy(request: NextRequest) {
     // will be done in the layout or individual pages using requirePermission()
   }
 
-  intlResponse.headers.set('x-pathname', request.nextUrl.pathname);
+  // Next 16 proxy can re-run on same-path rewrites. For already-prefixed
+  // locale routes, continue directly and provide the locale header next-intl
+  // needs instead of asking next-intl to rewrite `/en/...` to `/en/...`.
+  let intlResponse: NextResponse;
+  if (isValidLocale) {
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set(NEXT_INTL_LOCALE_HEADER, locale);
+    intlResponse = NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    });
+  } else {
+    intlResponse = intlMiddleware(request);
+  }
+
+  intlResponse.headers.set('x-pathname', originalPathname);
   intlResponse.headers.set('x-url', request.url);
 
   // Remove Set-Cookie from public pages to allow caching
   // We exclude admin, settings, activity, and auth pages from this behavior
+  const isRedirectResponse = intlResponse.headers.has('Location');
   if (
+    !isRedirectResponse &&
     !pathWithoutLocale.startsWith('/admin') &&
     !pathWithoutLocale.startsWith('/settings') &&
     !pathWithoutLocale.startsWith('/activity') &&

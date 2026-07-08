@@ -4,6 +4,12 @@
     "scoreSuffix": "/100"
   },
   "evidenceKinds": {
+    "paper": "论文",
+    "citation": "引用证据",
+    "writing-process": "写作过程",
+    "ai-use": "AI 使用记录",
+    "school": "学校材料",
+    "appeal": "申诉材料",
     "draft": "草稿与版本",
     "source": "引用来源",
     "ai-disclosure": "AI 使用边界",
@@ -17,6 +23,43 @@
     "medium": "中证据",
     "weak": "弱证据"
   },
+  "submitStatus": {
+    "ready": "可直接放入申诉包",
+    "needs-more": "需补充",
+    "do-not-submit": "不建议提交"
+  },
+  "timelinePhases": {
+    "topic": "选题与题目确认",
+    "research": "文献检索",
+    "reading": "阅读与摘录",
+    "draft": "初稿",
+    "ai-assist": "AI 辅助使用",
+    "revision": "修改与润色",
+    "citation-check": "引用核验",
+    "submission": "提交",
+    "challenge-appeal": "被质疑 / 申诉"
+  },
+  "proofTargets": {
+    "paper": "证明最终提交文本与本项目材料对应",
+    "citation": "证明引用真实、来源可核验",
+    "writing-process": "证明本人逐步写作，而非一次性生成",
+    "ai-use": "证明 AI 主要用于润色、语法或辅助理解，而非代写",
+    "school": "证明作业要求、AI 政策或质疑背景",
+    "appeal": "证明申诉沟通材料和提交记录完整"
+  },
+  "defaultRiskFlags": {
+    "paper": ["需要确认最终稿与提交版本一致"],
+    "citation": ["检查 DOI、年份、作者和出版社页面是否一致"],
+    "writing-process": ["需要补足时间戳或版本历史时可增强解释力"],
+    "ai-use": ["AI 对话如缺少时间戳，提交前建议补充说明"],
+    "school": ["需确认政策版本和课程要求日期"],
+    "appeal": ["申诉材料应避免包含无关私人信息"]
+  },
+  "actionItems": {
+    "ready": ["加入报告", "隐藏敏感信息"],
+    "needs-more": ["补充来源", "生成解释", "加入报告"],
+    "do-not-submit": ["隐藏敏感信息", "改为内部自查"]
+  },
   "date": {
     "unknown": "未识别时间",
     "empty": "未填写时间"
@@ -26,6 +69,7 @@
     "guestTitle": "当前为本地草稿模式，材料只保存在本浏览器。",
     "guestDesc": "登录后可创建多个云端项目，跨设备保存证据、时间线与申诉报告。",
     "guestSignIn": "登录以云端保存",
+    "guestMigrated": "您的本地草稿已保存为云端项目。",
     "title": "我的项目",
     "subtitle": "每个项目对应一份作业的写作过程证据、时间线和申诉报告。",
     "newProject": "新建项目",
@@ -47,10 +91,16 @@
     "syncSaved": "已云端保存",
     "localDraft": "本地草稿",
     "defaultTitle": "写作过程证据工作台",
-    "subtitle": "把草稿、引用来源、反馈、AI 使用记录和时间线整理成一份可复核的申诉材料。",
+    "subtitle": "上传最终稿和过程材料，自动整理为证据卡、学术过程时间线和可导出的申诉材料。",
     "metricCards": "证据卡",
     "metricEvents": "时间节点",
-    "metricScore": "可信评分",
+    "metricCoverage": "完整度",
+    "metricScore": "材料解释力",
+    "quick": {
+      "upload": "上传最终稿 + 过程材料",
+      "organize": "先确认证据卡",
+      "export": "再导出对应版本报告"
+    },
     "hydrate": {
       "guest": "未登录，当前为本地草稿模式，登录后可云端同步。",
       "loadFailed": "云端项目加载失败，已切换到本地草稿模式。",
@@ -65,6 +115,7 @@
       "assignmentPlaceholder": "例如：Research Essay Final Draft",
       "course": "课程名称",
       "coursePlaceholder": "例如：Academic Writing 101",
+      "submittedAt": "提交时间",
       "concern": "被质疑的问题",
       "concernPlaceholder": "例如：AI 检测显示高风险，但我有完整草稿和引用过程。",
       "policy": "课程/学校 AI 政策",
@@ -73,7 +124,7 @@
     },
     "privacy": {
       "title": "隐私与 AI 分析提示",
-      "desc": "文本类文件只在当前浏览器会话中读取预览；本地保存时不会持久化完整提取文本。点击“生成风险解释”后，证据摘要、时间线和必要文本片段会发送到配置的 StudyTrace AI 服务用于分析。导出或提交前请移除无关个人信息。"
+      "desc": "原始文件不会离开浏览器。文本、PDF、DOCX 会先在本地提取文字，随后仅将提取文本和元数据发送到配置的 StudyTrace AI 服务，用于生成证据卡和时间线；风险分析基于可编辑的证据卡和时间线。工作区存储不会持久化完整提取文本。导出或提交前请移除无关个人信息。"
     },
     "tabs": {
       "upload": "上传",
@@ -84,9 +135,21 @@
     },
     "upload": {
       "title": "上传材料",
-      "desc": "支持任意格式。文本、PDF、DOCX 会在浏览器本地提取文字用于分析；图片、压缩包等会保留元数据用于证据组织。原始文件不会上传，仅保存提取的文字。",
+      "desc": "支持任意格式。文本、PDF、DOCX 会在浏览器本地提取文字；图片、压缩包等会保留元数据用于证据组织。原始文件不会上传，仅将提取文本和元数据发送给 AI ingest。",
       "dropTitle": "选择或拖入写作材料",
       "dropDesc": "草稿、最终稿、参考文献、阅读笔记、Google Docs 导出、ChatGPT 对话截图、老师反馈、版本历史和提交回执都可以。",
+      "autoDesc": "上传后先生成证据卡，你确认后再导出报告。",
+      "acceptedMaterials": [
+        "最终论文 PDF / DOCX",
+        "Google Docs / Word 版本历史截图或导出",
+        "草稿、提纲、阅读摘录",
+        "文献 PDF、Zotero / EndNote / BibTeX / RIS",
+        "ChatGPT / Claude / Grammarly 使用记录",
+        "学校 AI policy、assignment brief、rubric",
+        "Turnitin / GPTZero / 学校邮件 / misconduct notice"
+      ],
+      "categoryCount": "{count} 项",
+      "emptyGroup": "这一类还没有材料。",
       "empty": "还没有上传材料。",
       "lastModified": "最后修改：",
       "fingerprint": "指纹 SHA-256：",
@@ -95,7 +158,14 @@
         "organizing": "正在整理上传材料...",
         "parsingOne": "正在解析：{name}",
         "parsingMulti": "正在解析第 {index}/{total} 个文件：{name}",
-        "generated": "已生成 {count} 张证据卡和时间线节点。"
+        "generated": "已生成 {count} 张证据卡和时间线节点。",
+        "ingesting": "正在用 AI 生成证据卡和时间线...",
+        "aiGenerated": "AI 已生成 {cards} 张证据卡和 {events} 个时间线节点。",
+        "localGenerated": "已生成 {count} 张本地证据卡和时间线节点。",
+        "reportReady": "报告草稿已准备好，本地评分 {score}/100。",
+        "needAuth": "登录后可使用 AI ingest；当前已生成本地证据卡和时间线节点。",
+        "needCredits": "AI ingest 需要可用积分；当前已生成本地证据卡和时间线节点。",
+        "unavailable": "AI ingest 暂不可用，已生成本地证据卡和时间线节点。"
       }
     },
     "cards": {
@@ -110,6 +180,17 @@
       "formSummaryPlaceholder": "说明这份证据是什么、来自哪里、与作业哪一部分相关。",
       "formNotes": "申诉说明",
       "formNotesPlaceholder": "写成可以直接放进报告的语句。",
+      "proofTarget": "证明对象",
+      "proofTargetPlaceholder": "例如：证明 AI 仅用于语法润色",
+      "paperLocator": "关联段落",
+      "paperLocatorPlaceholder": "例如：第 4 页第 3 段第 2 句",
+      "locatorWholePaper": "整篇论文 / 最终提交稿",
+      "locatorToFill": "待关联到页码、段落或句子",
+      "submitStatus": "可提交性",
+      "riskFlags": "风险点",
+      "actions": "操作",
+      "noRiskFlags": "暂未标记明显风险点。",
+      "notSpecified": "未填写",
       "add": "添加证据卡",
       "sourceLabel": "来源：{source}",
       "deleteAria": "删除证据卡",
@@ -123,6 +204,8 @@
       "title": "写作时间线",
       "desc": "用时间线呈现“逐步完成”的证据链，而不是只展示最终稿。",
       "time": "时间",
+      "phase": "学术过程阶段",
+      "phaseUnknown": "未归类阶段",
       "label": "节点标题",
       "labelPlaceholder": "例如：完成第一版提纲",
       "detail": "细节",
@@ -134,22 +217,61 @@
       "added": "已添加时间线节点。",
       "uploadLabel": "上传证据：{name}",
       "uploadDetail": "{kind}，文件最后修改时间为 {time}。",
-      "sourceTimestamp": "文件时间戳"
+      "sourceTimestamp": "文件时间戳",
+      "processConclusionTitle": "过程结论",
+      "processConclusion": "该论文当前有连续 {days} 天可见记录、{drafts} 个写作过程证据、{citations} 条引用证据、{ai} 条 AI 使用记录。请继续补齐缺口后再提交。",
+      "linkedCards": "已关联 {count} 张证据卡"
     },
     "risk": {
       "title": "风险解释",
-      "desc": "分析的目标不是绕过检测器，而是说明材料可信度、缺口和可复核路径。",
+      "desc": "这里不判断是否存在学术不端，只解释哪些材料能支持你的说明、哪里还需要补证。",
       "summary": "综合说明",
       "mainRisks": "主要风险",
       "timelineFindings": "时间线发现",
       "gaps": "需要补充",
       "reanalyze": "重新分析",
       "localEval": "本地评估",
-      "localRefreshed": "已刷新本地分析。"
+      "localRefreshed": "已刷新本地分析。",
+      "dimensions": [
+        {
+          "title": "引用真实性风险",
+          "desc": "引用是否能被 DOI、出版社页面、数据库记录或阅读摘录核验。"
+        },
+        {
+          "title": "引用格式风险",
+          "desc": "作者、年份、页码、格式与学校要求是否一致。"
+        },
+        {
+          "title": "AI 使用解释风险",
+          "desc": "AI 工具、日期、用途和是否进入最终稿是否说得清楚。"
+        },
+        {
+          "title": "写作过程断点风险",
+          "desc": "选题、检索、草稿、修改、提交之间是否缺少可见证据。"
+        },
+        {
+          "title": "申诉材料完整性风险",
+          "desc": "学校通知、作业要求、证据索引和附录是否完整。"
+        }
+      ]
     },
     "report": {
       "title": "报告导出",
-      "desc": "导出 Markdown 可继续编辑；导出 PDF 可直接提交；登录后可保存到云端历史。",
+      "desc": "按使用场景导出三种报告，避免把内部自查风险直接交给学校。",
+      "variants": {
+        "self-check": {
+          "title": "学生自查版",
+          "desc": "包含所有风险、建议和暂不提交的证据，用于自己补材料。"
+        },
+        "school-submission": {
+          "title": "学校提交版",
+          "desc": "措辞克制，只放可证明材料，不显示内部评分。"
+        },
+        "appeal-statement": {
+          "title": "申诉陈述版",
+          "desc": "包含时间线、证据索引、AI 使用说明和引用核验摘要。"
+        }
+      },
       "generate": "生成分析",
       "exportPdf": "导出 PDF",
       "exportMarkdown": "导出 Markdown",
@@ -186,6 +308,7 @@
     },
     "sidebar": {
       "coverage": "完整度",
+      "coverageProgress": "{ready}/{total} 类核心证据已就绪",
       "generate": "生成风险解释",
       "settingsTitle": "配置项",
       "settingsDesc": "参考同类产品的常见配置，先做成前端工作流参数。",
@@ -235,10 +358,7 @@
       "gap": "缺少草稿版本、引用来源和 AI 使用边界说明。",
       "appeal": "补充材料后生成申诉陈述。",
       "aiBoundary": "请说明 AI 是否用于选题、提纲、润色、语法检查或资料整理。",
-      "checklist": [
-        "上传至少 3 类证据。",
-        "填写课程与作业信息。"
-      ]
+      "checklist": ["上传至少 3 类证据。", "填写课程与作业信息。"]
     },
     "local": {
       "riskMissing": "缺少 {kinds}，容易让申诉材料显得片面。",
@@ -277,22 +397,38 @@
   },
   "reportDoc": {
     "title": "写作过程与 AI 使用边界说明",
+    "variantTitles": {
+      "self-check": "学生自查版报告",
+      "school-submission": "学校提交版报告",
+      "appeal-statement": "申诉陈述版报告"
+    },
     "basicHeading": "基本信息",
     "assignment": "作业",
     "course": "课程",
+    "submissionTime": "提交时间",
     "concern": "质疑点",
     "policy": "学校/课程政策",
     "notFilled": "未填写",
     "summaryHeading": "总结",
-    "trustScore": "可信材料评分：{score}/100",
+    "trustScore": "材料解释力：{score}/100",
+    "citationSummaryHeading": "引用真实性核验摘要",
+    "citationSummary": "当前有 {count} 张引用证据卡。导出前应逐条确认 DOI、出版社页面、数据库记录或阅读摘录。",
+    "noCitationSummary": "当前还没有引用证据卡，建议补充文献 PDF、书目信息、数据库页面或引用库文件。",
     "aiBoundaryHeading": "AI 使用边界",
+    "aiUseSummary": "当前有 {count} 张 AI 使用记录卡。建议确认工具、日期、用途和是否进入最终稿。",
+    "noAiUseSummary": "当前还没有 AI 使用记录卡。如有使用 ChatGPT、Claude、Grammarly 等工具，建议补充使用记录或说明。",
     "cardsHeading": "证据卡",
     "credibility": "可信度",
+    "proofTarget": "证明对象",
+    "paperLocator": "关联段落",
+    "submitStatus": "可提交性",
+    "cardRisks": "风险点",
     "noSummary": "未填写摘要",
     "notesLabel": "说明",
     "empty": "未填写",
     "noCards": "暂无证据卡。",
     "timelineHeading": "时间线",
+    "phase": "阶段",
     "sourceLabel": "来源",
     "noTimeline": "暂无时间线。",
     "fingerprintHeading": "证据文件指纹（SHA-256）",
@@ -304,10 +440,12 @@
     "riskHeading": "风险解释",
     "gapsHeading": "需要补充的材料",
     "appealHeading": "申诉陈述结构",
-    "checklistHeading": "导出前检查"
+    "checklistHeading": "导出前检查",
+    "disclaimerHeading": "免责声明",
+    "disclaimer": "本报告不判断是否存在学术不端，仅整理可核验材料，用于解释写作过程和辅助沟通。"
   },
   "scorePanel": {
-    "title": "可信材料评分",
-    "outOf": "满分 100"
+    "title": "材料解释力",
+    "outOf": "不是学术不端判定"
   }
 }

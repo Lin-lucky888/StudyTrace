@@ -593,6 +593,14 @@ export const studytraceEvidenceCard = table(
     summary: longtext('summary').notNull(),
     notes: longtext('notes').notNull(),
     strength: varchar('strength', { length: 50 }).notNull().default('medium'),
+    proofTarget: varchar('proof_target', { length: 255 }).notNull().default(''),
+    paperLocator: varchar('paper_locator', { length: 255 })
+      .notNull()
+      .default(''),
+    submitStatus: varchar('submit_status', { length: 50 })
+      .notNull()
+      .default(''),
+    actionItems: longtext('action_items').notNull(),
     tags: longtext('tags').notNull(),
     riskFlags: longtext('risk_flags').notNull(),
     sort: int('sort').notNull().default(0),
@@ -625,6 +633,8 @@ export const studytraceTimelineEvent = table(
     detail: longtext('detail').notNull(),
     source: varchar('source', { length: 255 }).notNull().default(''),
     strength: varchar('strength', { length: 50 }).notNull().default('medium'),
+    phase: varchar('phase', { length: 50 }).notNull().default(''),
+    cardIds: longtext('card_ids').notNull(),
     sort: int('sort').notNull().default(0),
     status: varchar('status', { length: 50 }).notNull().default('active'),
     createdAt: timestamp('created_at').defaultNow().notNull(),

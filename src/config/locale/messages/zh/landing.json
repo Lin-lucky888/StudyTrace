@@ -24,25 +24,15 @@
           "icon": "FileText"
         },
         {
-          "title": "风险解释",
-          "url": "/#risk",
-          "icon": "ShieldCheck"
-        },
-        {
-          "title": "常见问题",
-          "url": "/#faq",
-          "icon": "CircleHelp"
-        },
-        {
-          "title": "工作区",
-          "url": "/studytrace",
-          "icon": "UploadCloud"
+          "title": "价格",
+          "url": "/pricing",
+          "icon": "CreditCard"
         }
       ]
     },
     "buttons": [
       {
-        "title": "打开工作区",
+        "title": "开始",
         "url": "/studytrace",
         "target": "_self",
         "icon": "UploadCloud"
@@ -50,13 +40,18 @@
     ],
     "user_nav": {
       "show_name": true,
-      "show_credits": false,
+      "show_credits": true,
       "show_sign_out": true,
       "items": [
         {
           "title": "工作区",
           "url": "/studytrace",
           "icon": "FileText"
+        },
+        {
+          "title": "账单",
+          "url": "/settings/billing",
+          "icon": "CreditCard"
         }
       ]
     },

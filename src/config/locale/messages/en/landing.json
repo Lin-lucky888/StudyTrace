@@ -24,25 +24,15 @@
           "icon": "FileText"
         },
         {
-          "title": "Risk",
-          "url": "/#risk",
-          "icon": "ShieldCheck"
-        },
-        {
-          "title": "FAQ",
-          "url": "/#faq",
-          "icon": "CircleHelp"
-        },
-        {
-          "title": "Workspace",
-          "url": "/studytrace",
-          "icon": "UploadCloud"
+          "title": "Pricing",
+          "url": "/pricing",
+          "icon": "CreditCard"
         }
       ]
     },
     "buttons": [
       {
-        "title": "Open Workspace",
+        "title": "Start",
         "url": "/studytrace",
         "target": "_self",
         "icon": "UploadCloud"
@@ -50,13 +40,18 @@
     ],
     "user_nav": {
       "show_name": true,
-      "show_credits": false,
+      "show_credits": true,
       "show_sign_out": true,
       "items": [
         {
           "title": "Workspace",
           "url": "/studytrace",
           "icon": "FileText"
+        },
+        {
+          "title": "Billing",
+          "url": "/settings/billing",
+          "icon": "CreditCard"
         }
       ]
     },

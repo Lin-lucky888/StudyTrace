@@ -155,6 +155,10 @@ export type SnapshotCard = {
   summary: string;
   notes: string;
   strength: string;
+  proofTarget?: string;
+  paperLocator?: string;
+  submitStatus?: string;
+  actionItems?: string[];
   tags: string[];
   riskFlags: string[];
 };
@@ -167,6 +171,8 @@ export type SnapshotTimelineEvent = {
   detail: string;
   source: string;
   strength: string;
+  phase?: string;
+  cardIds?: string[];
 };
 
 export type StudyTraceProjectSnapshot = {
@@ -448,6 +454,10 @@ export async function getStudyTraceProjectSnapshot(
       summary: row.summary,
       notes: row.notes,
       strength: row.strength,
+      proofTarget: row.proofTarget || undefined,
+      paperLocator: row.paperLocator || undefined,
+      submitStatus: row.submitStatus || undefined,
+      actionItems: parseJsonArray(row.actionItems),
       tags: parseJsonArray(row.tags),
       riskFlags: parseJsonArray(row.riskFlags),
     })),
@@ -459,6 +469,8 @@ export async function getStudyTraceProjectSnapshot(
       detail: row.detail,
       source: row.source,
       strength: row.strength,
+      phase: row.phase || undefined,
+      cardIds: parseJsonArray(row.cardIds),
     })),
     analysis,
   };
@@ -536,7 +548,7 @@ export async function saveStudyTraceProjectSnapshot(
           size: Number(file.size) || 0,
           type: file.type || '',
           extension: file.extension || '',
-          category: file.category || 'other',
+          category: file.category || 'writing-process',
           checksum: file.checksum || null,
           extractedText: file.extractedText || null,
           lastModifiedAt: toDate(file.lastModified),
@@ -557,11 +569,15 @@ export async function saveStudyTraceProjectSnapshot(
           userId,
           fileId: card.fileId && fileIds.has(card.fileId) ? card.fileId : null,
           title: card.title || '',
-          kind: card.kind || 'other',
+          kind: card.kind || 'appeal',
           source: card.source || '',
           summary: card.summary || '',
           notes: card.notes || '',
           strength: card.strength || 'medium',
+          proofTarget: card.proofTarget || '',
+          paperLocator: card.paperLocator || '',
+          submitStatus: card.submitStatus || '',
+          actionItems: JSON.stringify(card.actionItems || []),
           tags: JSON.stringify(card.tags || []),
           riskFlags: JSON.stringify(card.riskFlags || []),
           sort: index,
@@ -571,6 +587,8 @@ export async function saveStudyTraceProjectSnapshot(
         }))
       );
     }
+
+    const cardIds = new Set(input.cards.map((card) => card.id));
 
     if (input.timeline.length) {
       await tx.insert(studytraceTimelineEvent).values(
@@ -585,6 +603,10 @@ export async function saveStudyTraceProjectSnapshot(
           detail: event.detail || '',
           source: event.source || '',
           strength: event.strength || 'medium',
+          phase: event.phase || '',
+          cardIds: JSON.stringify(
+            (event.cardIds || []).filter((id) => cardIds.has(id))
+          ),
           sort: index,
           status: 'active',
           createdAt: now,

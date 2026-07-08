@@ -27,6 +27,7 @@ type StudyTracePayload = {
   assignment?: {
     title?: string;
     courseName?: string;
+    submittedAt?: string;
     institutionPolicy?: string;
     concern?: string;
   };
@@ -40,7 +41,9 @@ type StudyTracePayload = {
 
 // English is the default output language; Chinese only when explicitly requested.
 function resolveOutputLanguage(locale?: string) {
-  return locale && locale.toLowerCase().startsWith('zh') ? 'Chinese' : 'English';
+  return locale && locale.toLowerCase().startsWith('zh')
+    ? 'Chinese'
+    : 'English';
 }
 
 type StudyTraceModelConfig = {
@@ -151,7 +154,12 @@ function buildSystemPrompt(language: string) {
     'You are StudyTrace, a careful academic integrity evidence organizer.',
     'Your job is to help a student organize truthful writing-process evidence, citation sources, AI-use boundaries, and appeal materials.',
     'Do not help evade detection, fabricate evidence, hide AI usage, or claim certainty about detector errors.',
-    'Explain risk in a balanced way and recommend verifiable evidence.',
+    'Base every conclusion on the provided evidence cards and timeline events. If evidence is missing, say it is missing instead of inventing it.',
+    'Explain risk in a balanced way and recommend verifiable evidence, not tactics for bypassing AI detection.',
+    'Use explanatory wording, not verdict wording. Do not write "AI risk 82%", "suspected plagiarism", "fake citation", or equivalent categorical labels.',
+    'Risk explanation must cover these dimensions when relevant: citation authenticity, citation format, AI-use explanation, writing-process gaps, and appeal-material completeness.',
+    'This product does not decide whether academic misconduct occurred. It organizes verifiable materials for explanation and communication.',
+    'Do not write a complete appeal letter. Return analysis pieces that the front-end report template can assemble.',
     'Return strict JSON only with these keys: trustScore, summary, riskItems, timelineFindings, evidenceGaps, appealOutline, aiBoundaryStatement, exportChecklist.',
     `trustScore must be an integer from 0 to 100. All text fields and list items must be concise ${language} strings.`,
   ].join('\n');
@@ -160,8 +168,13 @@ function buildSystemPrompt(language: string) {
 function buildUserPrompt(payload: StudyTracePayload, language: string) {
   return [
     `Generate the analysis in ${language}.`,
-    'Focus on: the genuine writing process, citation sources, AI-use boundary, an appeal evidence checklist, and a balanced risk explanation.',
+    'Focus on: the genuine writing process, citation authenticity, citation formatting, AI-use boundary, appeal-material completeness, and a balanced explanatory risk summary.',
     'Requirements: do not fabricate evidence that does not exist; if materials are insufficient, clearly point out the gaps.',
+    'Use evidenceCards and timelineEvents as the source of truth. files are supporting context only.',
+    'Good wording example: "Paragraph 4 has an AI-detection dispute risk because the sentence pattern is highly regular, but draft/version evidence supports the writing process."',
+    'Good wording example: "Smith 2021 lacks a DOI; add a publisher page or replace it with a verifiable source."',
+    'Good wording example: "AI-use records indicate grammar polishing and do not show direct pasting of generated paragraphs."',
+    'appealOutline should be an outline/checklist, not a polished appeal letter.',
     '',
     JSON.stringify(
       {
