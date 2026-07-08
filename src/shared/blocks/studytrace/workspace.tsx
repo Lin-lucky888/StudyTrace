@@ -49,734 +49,54 @@ import { Textarea } from '@/shared/components/ui/textarea';
 import { cn } from '@/shared/lib/utils';
 
 import { extractFileText } from './extract-text';
+import {
+  applyIngestFileCategories,
+  buildCardFromFile,
+  buildTimelineFromFile,
+  defaultActionItems,
+  defaultSettings,
+  enrichEvidenceCard,
+  enrichTimelineEvent,
+  evidenceKindKeys,
+  formatDateLabel,
+  formatFileSize,
+  getEvidenceKind,
+  getInitialAnalysis,
+  getLocalAnalysis,
+  getSubmitStatus,
+  getTimelinePhase,
+  isQuotaExceededError,
+  newId,
+  sanitizeSavedAnalysis,
+  sanitizeSavedCard,
+  sanitizeSavedFile,
+  sanitizeSavedTimelineEvent,
+  setActiveDateFormatting,
+  sha256File,
+  shortChecksum,
+  STORAGE_KEY,
+  stripExtractedTextFromFiles,
+  strengthFromKind,
+  takeSavedItems,
+  timelinePhaseKeys,
+  toDateTimeInput,
+  truncateSavedText,
+  getExtension,
+  guessEvidenceKind,
+  type EvidenceCard,
+  type EvidenceKind,
+  type EvidenceStrength,
+  type ReportVariant,
+  type SavedReport,
+  type StudyTraceAnalysis,
+  type StudyTraceIngestResult,
+  type StudyTraceSettings,
+  type SubmitStatus,
+  type TimelineEvent,
+  type TimelinePhase,
+  type UploadedEvidenceFile,
+} from './lib';
 import { exportReportPdf } from './report-pdf';
-
-type EvidenceKind =
-  | 'paper'
-  | 'citation'
-  | 'writing-process'
-  | 'ai-use'
-  | 'school'
-  | 'appeal';
-
-type EvidenceStrength = 'strong' | 'medium' | 'weak';
-type SubmitStatus = 'ready' | 'needs-more' | 'do-not-submit';
-type TimelinePhase =
-  | 'topic'
-  | 'research'
-  | 'reading'
-  | 'draft'
-  | 'ai-assist'
-  | 'revision'
-  | 'citation-check'
-  | 'submission'
-  | 'challenge-appeal';
-type ReportVariant = 'self-check' | 'school-submission' | 'appeal-statement';
-
-type UploadedEvidenceFile = {
-  id: string;
-  name: string;
-  size: number;
-  type: string;
-  extension: string;
-  lastModified: string;
-  lastModifiedLabel: string;
-  category: EvidenceKind;
-  extractedText?: string;
-  checksum?: string;
-};
-
-type EvidenceCard = {
-  id: string;
-  title: string;
-  kind: EvidenceKind;
-  source: string;
-  fileId?: string;
-  summary: string;
-  notes: string;
-  strength: EvidenceStrength;
-  proofTarget?: string;
-  paperLocator?: string;
-  submitStatus?: SubmitStatus;
-  actionItems?: string[];
-  tags: string[];
-  riskFlags: string[];
-};
-
-type TimelineEvent = {
-  id: string;
-  date: string;
-  label: string;
-  detail: string;
-  source: string;
-  strength: EvidenceStrength;
-  phase?: TimelinePhase;
-  cardIds?: string[];
-};
-
-type StudyTraceSettings = {
-  evidenceStandard: 'balanced' | 'strict';
-  riskSensitivity: number;
-  aiPolicy: 'none' | 'assistive-only' | 'drafting-with-disclosure';
-  includeDetectorCaveat: boolean;
-  includeCitationAudit: boolean;
-  requiredEvidenceKinds: EvidenceKind[];
-};
-
-type StudyTraceAnalysis = {
-  trustScore: number;
-  summary: string;
-  riskItems: string[];
-  timelineFindings: string[];
-  evidenceGaps: string[];
-  appealOutline: string[];
-  aiBoundaryStatement: string;
-  exportChecklist: string[];
-  providerStatus?: string;
-};
-
-type StudyTraceIngestResult = {
-  files?: {
-    id: string;
-    category: EvidenceKind;
-  }[];
-  evidenceCards: EvidenceCard[];
-  timelineEvents: TimelineEvent[];
-  providerStatus?: string;
-};
-
-type SavedReport = {
-  id: string;
-  title: string;
-  format: string;
-  content: string;
-  createdAt: string;
-};
-
-const STORAGE_KEY = 'studytrace-workspace-v1';
-const MAX_SAVED_ITEMS = 120;
-const MAX_SAVED_TEXT_LENGTH = 1_200;
-const MAX_SAVED_ANALYSIS_ITEMS = 20;
-
-// next-intl translator scoped to the `studytrace` namespace. Passed into
-// module-level helpers so their generated copy stays locale-aware.
-type StudyTraceTranslator = ReturnType<typeof useTranslations>;
-
-const evidenceKindKeys: EvidenceKind[] = [
-  'paper',
-  'citation',
-  'writing-process',
-  'ai-use',
-  'school',
-  'appeal',
-];
-
-const timelinePhaseKeys: TimelinePhase[] = [
-  'topic',
-  'research',
-  'reading',
-  'draft',
-  'ai-assist',
-  'revision',
-  'citation-check',
-  'submission',
-  'challenge-appeal',
-];
-
-function getEvidenceKind(value: unknown): EvidenceKind | null {
-  const normalized =
-    typeof value === 'string'
-      ? value.trim().toLowerCase().replace(/_/g, '-')
-      : '';
-
-  const legacyMap: Record<string, EvidenceKind> = {
-    draft: 'writing-process',
-    source: 'citation',
-    'ai-disclosure': 'ai-use',
-    feedback: 'writing-process',
-    version: 'writing-process',
-    process: 'writing-process',
-    other: 'appeal',
-  };
-
-  if (legacyMap[normalized]) return legacyMap[normalized];
-
-  return evidenceKindKeys.includes(normalized as EvidenceKind)
-    ? (normalized as EvidenceKind)
-    : null;
-}
-
-function isEvidenceKind(value: unknown): value is EvidenceKind {
-  return Boolean(getEvidenceKind(value));
-}
-
-const defaultSettings: StudyTraceSettings = {
-  evidenceStandard: 'balanced',
-  riskSensitivity: 62,
-  aiPolicy: 'assistive-only',
-  includeDetectorCaveat: true,
-  includeCitationAudit: true,
-  requiredEvidenceKinds: [
-    'paper',
-    'citation',
-    'writing-process',
-    'ai-use',
-    'school',
-    'appeal',
-  ],
-};
-
-function getInitialAnalysis(t: StudyTraceTranslator): StudyTraceAnalysis {
-  return {
-    trustScore: 38,
-    summary: t('analysis.initial.summary'),
-    riskItems: [t('analysis.initial.risk')],
-    timelineFindings: [t('analysis.initial.timeline')],
-    evidenceGaps: [t('analysis.initial.gap')],
-    appealOutline: [t('analysis.initial.appeal')],
-    aiBoundaryStatement: t('analysis.initial.aiBoundary'),
-    exportChecklist: t.raw('analysis.initial.checklist') as string[],
-    providerStatus: 'local',
-  };
-}
-
-// Date formatting reads these module singletons, set from the active locale on
-// each render, so the many call sites below stay parameter-free.
-let activeDateLocale = 'en';
-let unrecognizedTimeLabel = 'Unrecognized time';
-
-const newId = () =>
-  typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : Math.random().toString(36).slice(2);
-
-function formatFileSize(bytes: number) {
-  if (!bytes) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB'];
-  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), 3);
-  return `${(bytes / 1024 ** index).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
-}
-
-function formatDateLabel(value: string | number | Date) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return unrecognizedTimeLabel;
-  return new Intl.DateTimeFormat(activeDateLocale, {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date);
-}
-
-function toDateTimeInput(value: string | number | Date) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  const offset = date.getTimezoneOffset();
-  return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 16);
-}
-
-function getExtension(name: string) {
-  const dot = name.lastIndexOf('.');
-  return dot >= 0 ? name.slice(dot + 1).toLowerCase() : '';
-}
-
-// Content fingerprint. Computed in the browser over the raw bytes so the
-// original file never leaves the device, yet the SHA-256 can later prove the
-// exact content that existed at upload time. Requires a secure context
-// (https / localhost); degrades to an empty string otherwise.
-async function sha256File(file: File): Promise<string> {
-  try {
-    if (!globalThis.crypto?.subtle) return '';
-    const buffer = await file.arrayBuffer();
-    const digest = await globalThis.crypto.subtle.digest('SHA-256', buffer);
-    return Array.from(new Uint8Array(digest))
-      .map((byte) => byte.toString(16).padStart(2, '0'))
-      .join('');
-  } catch {
-    return '';
-  }
-}
-
-function shortChecksum(value?: string) {
-  if (!value) return '';
-  return `${value.slice(0, 8)}…${value.slice(-6)}`;
-}
-
-function guessEvidenceKind(file: File): EvidenceKind {
-  const name = file.name.toLowerCase();
-  const ext = getExtension(file.name);
-  if (
-    name.includes('final') ||
-    name.includes('submission') ||
-    name.includes('submitted') ||
-    name.includes('essay') ||
-    name.includes('paper') ||
-    name.includes('最终') ||
-    name.includes('终稿') ||
-    name.includes('论文')
-  ) {
-    return 'paper';
-  }
-  if (
-    name.includes('citation') ||
-    name.includes('source') ||
-    name.includes('reference') ||
-    name.includes('bibliography') ||
-    name.includes('zotero') ||
-    name.includes('endnote') ||
-    name.includes('bibtex') ||
-    name.includes('ris') ||
-    ['bib', 'ris'].includes(ext) ||
-    name.includes('quote') ||
-    name.includes('引用') ||
-    name.includes('参考') ||
-    name.includes('文献')
-  ) {
-    return 'citation';
-  }
-  if (
-    name.includes('ai') ||
-    name.includes('chatgpt') ||
-    name.includes('claude') ||
-    name.includes('grammarly') ||
-    name.includes('prompt') ||
-    name.includes('声明') ||
-    name.includes('润色')
-  ) {
-    return 'ai-use';
-  }
-  if (
-    name.includes('policy') ||
-    name.includes('assignment') ||
-    name.includes('brief') ||
-    name.includes('rubric') ||
-    name.includes('turnitin') ||
-    name.includes('gptzero') ||
-    name.includes('misconduct') ||
-    name.includes('notice') ||
-    name.includes('email') ||
-    name.includes('政策') ||
-    name.includes('题目') ||
-    name.includes('作业要求') ||
-    name.includes('通知') ||
-    name.includes('邮件')
-  ) {
-    return 'school';
-  }
-  if (
-    name.includes('appeal') ||
-    name.includes('statement') ||
-    name.includes('申诉') ||
-    name.includes('陈述')
-  ) {
-    return 'appeal';
-  }
-  if (
-    name.includes('feedback') ||
-    name.includes('comment') ||
-    name.includes('批注') ||
-    name.includes('反馈')
-  ) {
-    return 'writing-process';
-  }
-  if (
-    name.includes('history') ||
-    name.includes('version') ||
-    name.includes('draft') ||
-    name.includes('outline') ||
-    name.includes('google docs') ||
-    name.includes('草稿') ||
-    name.includes('提纲') ||
-    name.includes('版本') ||
-    ['gdoc', 'docx', 'doc', 'pages'].includes(ext)
-  ) {
-    return 'writing-process';
-  }
-  return 'writing-process';
-}
-
-function truncateSavedText(value: unknown, maxLength = MAX_SAVED_TEXT_LENGTH) {
-  if (typeof value !== 'string') return '';
-  const normalized = value.replace(/\s+/g, ' ').trim();
-  return normalized.length > maxLength
-    ? `${normalized.slice(0, maxLength)}...`
-    : normalized;
-}
-
-function takeSavedItems<T>(items: T[] | undefined) {
-  return Array.isArray(items) ? items.slice(0, MAX_SAVED_ITEMS) : [];
-}
-
-function sanitizeSavedFile(file: UploadedEvidenceFile): UploadedEvidenceFile {
-  return {
-    id: file.id,
-    name: truncateSavedText(file.name, 240),
-    size: Number(file.size) || 0,
-    type: truncateSavedText(file.type, 120) || 'unknown',
-    extension: truncateSavedText(file.extension, 40),
-    lastModified: truncateSavedText(file.lastModified, 80),
-    lastModifiedLabel: truncateSavedText(file.lastModifiedLabel, 80),
-    category: getEvidenceKind(file.category) || 'writing-process',
-    checksum: file.checksum,
-  };
-}
-
-function stripExtractedTextFromFiles(
-  files: UploadedEvidenceFile[]
-): UploadedEvidenceFile[] {
-  return files.map(sanitizeSavedFile);
-}
-
-function sanitizeSavedCard(card: EvidenceCard): EvidenceCard {
-  const kind = getEvidenceKind(card.kind) || 'appeal';
-  const submitStatus = getSubmitStatus(card.submitStatus);
-
-  return {
-    id: card.id,
-    title: truncateSavedText(card.title, 240),
-    kind,
-    source: truncateSavedText(card.source, 240),
-    fileId: card.fileId,
-    summary: truncateSavedText(card.summary),
-    notes: truncateSavedText(card.notes),
-    strength: card.strength,
-    proofTarget: truncateSavedText(card.proofTarget, 240),
-    paperLocator: truncateSavedText(card.paperLocator, 180),
-    submitStatus,
-    actionItems: takeSavedItems(card.actionItems).map((item) =>
-      truncateSavedText(item, 120)
-    ),
-    tags: takeSavedItems(card.tags).map((tag) => truncateSavedText(tag, 80)),
-    riskFlags: takeSavedItems(card.riskFlags).map((flag) =>
-      truncateSavedText(flag, 160)
-    ),
-  };
-}
-
-function sanitizeSavedTimelineEvent(event: TimelineEvent): TimelineEvent {
-  return {
-    id: event.id,
-    date: truncateSavedText(event.date, 80),
-    label: truncateSavedText(event.label, 240),
-    detail: truncateSavedText(event.detail),
-    source: truncateSavedText(event.source, 240),
-    strength: event.strength,
-    phase: getTimelinePhase(event.phase) || 'draft',
-    cardIds: takeSavedItems(event.cardIds).map((id) =>
-      truncateSavedText(id, 120)
-    ),
-  };
-}
-
-function sanitizeSavedAnalysis(
-  analysis: StudyTraceAnalysis
-): StudyTraceAnalysis {
-  return {
-    trustScore: Number(analysis.trustScore) || 0,
-    summary: truncateSavedText(analysis.summary),
-    riskItems: takeSavedItems(analysis.riskItems)
-      .slice(0, MAX_SAVED_ANALYSIS_ITEMS)
-      .map((item) => truncateSavedText(item)),
-    timelineFindings: takeSavedItems(analysis.timelineFindings)
-      .slice(0, MAX_SAVED_ANALYSIS_ITEMS)
-      .map((item) => truncateSavedText(item)),
-    evidenceGaps: takeSavedItems(analysis.evidenceGaps)
-      .slice(0, MAX_SAVED_ANALYSIS_ITEMS)
-      .map((item) => truncateSavedText(item)),
-    appealOutline: takeSavedItems(analysis.appealOutline)
-      .slice(0, MAX_SAVED_ANALYSIS_ITEMS)
-      .map((item) => truncateSavedText(item)),
-    aiBoundaryStatement: truncateSavedText(analysis.aiBoundaryStatement),
-    exportChecklist: takeSavedItems(analysis.exportChecklist)
-      .slice(0, MAX_SAVED_ANALYSIS_ITEMS)
-      .map((item) => truncateSavedText(item)),
-    providerStatus: analysis.providerStatus,
-  };
-}
-
-function isQuotaExceededError(error: unknown) {
-  if (error instanceof DOMException) {
-    return (
-      error.name === 'QuotaExceededError' ||
-      error.name === 'NS_ERROR_DOM_QUOTA_REACHED'
-    );
-  }
-
-  return error instanceof Error && error.name.includes('Quota');
-}
-
-function strengthFromKind(kind: EvidenceKind): EvidenceStrength {
-  if (['paper', 'citation', 'writing-process'].includes(kind)) {
-    return 'strong';
-  }
-  if (['ai-use', 'school'].includes(kind)) return 'medium';
-  return 'weak';
-}
-
-function getSubmitStatus(value: unknown): SubmitStatus {
-  return value === 'ready' ||
-    value === 'needs-more' ||
-    value === 'do-not-submit'
-    ? value
-    : 'needs-more';
-}
-
-function getTimelinePhase(value: unknown): TimelinePhase | null {
-  const normalized =
-    typeof value === 'string'
-      ? value.trim().toLowerCase().replace(/_/g, '-')
-      : '';
-
-  return timelinePhaseKeys.includes(normalized as TimelinePhase)
-    ? (normalized as TimelinePhase)
-    : null;
-}
-
-function phaseFromKind(kind: EvidenceKind): TimelinePhase {
-  if (kind === 'paper') return 'submission';
-  if (kind === 'citation') return 'research';
-  if (kind === 'ai-use') return 'ai-assist';
-  if (kind === 'school') return 'topic';
-  if (kind === 'appeal') return 'challenge-appeal';
-  return 'draft';
-}
-
-function defaultProofTarget(kind: EvidenceKind, t: StudyTraceTranslator) {
-  return t(`proofTargets.${kind}`);
-}
-
-function defaultPaperLocator(kind: EvidenceKind, t: StudyTraceTranslator) {
-  return kind === 'paper'
-    ? t('workspace.cards.locatorWholePaper')
-    : t('workspace.cards.locatorToFill');
-}
-
-function defaultSubmitStatus(
-  kind: EvidenceKind,
-  strength: EvidenceStrength
-): SubmitStatus {
-  if (kind === 'appeal') return 'needs-more';
-  if (strength === 'weak') return 'needs-more';
-  return 'ready';
-}
-
-function defaultRiskFlags(kind: EvidenceKind, t: StudyTraceTranslator) {
-  const values = t.raw(`defaultRiskFlags.${kind}`) as string[];
-  return Array.isArray(values) ? values.slice(0, 2) : [];
-}
-
-function defaultActionItems(status: SubmitStatus, t: StudyTraceTranslator) {
-  const values = t.raw(`actionItems.${status}`) as string[];
-  return Array.isArray(values) ? values : [];
-}
-
-function enrichEvidenceCard(
-  card: EvidenceCard,
-  t: StudyTraceTranslator
-): EvidenceCard {
-  const kind = getEvidenceKind(card.kind) || 'appeal';
-  const strength = card.strength || strengthFromKind(kind);
-  const submitStatus = card.submitStatus || defaultSubmitStatus(kind, strength);
-
-  return {
-    ...card,
-    kind,
-    strength,
-    proofTarget: card.proofTarget || defaultProofTarget(kind, t),
-    paperLocator: card.paperLocator || defaultPaperLocator(kind, t),
-    submitStatus,
-    actionItems: card.actionItems?.length
-      ? card.actionItems
-      : defaultActionItems(submitStatus, t),
-    riskFlags: card.riskFlags?.length
-      ? card.riskFlags
-      : defaultRiskFlags(kind, t),
-  };
-}
-
-function buildCardFromFile(
-  file: UploadedEvidenceFile,
-  t: StudyTraceTranslator
-): EvidenceCard {
-  const kindLabel = t(`evidenceKinds.${file.category}`);
-  const preview = file.extractedText
-    ? file.extractedText.replace(/\s+/g, ' ').slice(0, 180)
-    : '';
-
-  return enrichEvidenceCard(
-    {
-      id: newId(),
-      title: file.name,
-      kind: file.category,
-      source: t('workspace.cards.sourceUpload'),
-      fileId: file.id,
-      summary: preview
-        ? t('workspace.cards.summaryFromPreview', { kind: kindLabel, preview })
-        : t('workspace.cards.summaryFromMeta', {
-            kind: kindLabel,
-            ext: file.extension || file.type || 'unknown',
-            size: formatFileSize(file.size),
-          }),
-      notes: '',
-      strength: strengthFromKind(file.category),
-      tags: [kindLabel, file.extension || 'file'].filter(Boolean),
-      riskFlags: [],
-    },
-    t
-  );
-}
-
-function buildTimelineFromFile(
-  file: UploadedEvidenceFile,
-  t: StudyTraceTranslator,
-  cardId?: string
-): TimelineEvent {
-  return {
-    id: newId(),
-    date: toDateTimeInput(file.lastModified),
-    label: t('workspace.timeline.uploadLabel', { name: file.name }),
-    detail: t('workspace.timeline.uploadDetail', {
-      kind: t(`evidenceKinds.${file.category}`),
-      time: file.lastModifiedLabel,
-    }),
-    source: t('workspace.timeline.sourceTimestamp'),
-    strength: strengthFromKind(file.category),
-    phase: phaseFromKind(file.category),
-    cardIds: cardId ? [cardId] : [],
-  };
-}
-
-function enrichTimelineEvent(event: TimelineEvent): TimelineEvent {
-  return {
-    ...event,
-    phase: getTimelinePhase(event.phase) || 'draft',
-    cardIds: Array.isArray(event.cardIds) ? event.cardIds : [],
-  };
-}
-
-function applyIngestFileCategories(
-  uploadedFiles: UploadedEvidenceFile[],
-  ingestFiles?: StudyTraceIngestResult['files']
-) {
-  if (!Array.isArray(ingestFiles) || !ingestFiles.length) {
-    return uploadedFiles;
-  }
-
-  const categoryById = new Map(
-    ingestFiles
-      .filter((file) => file?.id && isEvidenceKind(file.category))
-      .map((file) => [file.id, getEvidenceKind(file.category) || 'appeal'])
-  );
-
-  return uploadedFiles.map((file) => ({
-    ...file,
-    category: categoryById.get(file.id) || file.category,
-  }));
-}
-
-function getLocalAnalysis({
-  files,
-  cards,
-  timeline,
-  aiBoundary,
-  settings,
-  t,
-}: {
-  files: UploadedEvidenceFile[];
-  cards: EvidenceCard[];
-  timeline: TimelineEvent[];
-  aiBoundary: string;
-  settings: StudyTraceSettings;
-  t: StudyTraceTranslator;
-}): StudyTraceAnalysis {
-  const presentKinds = new Set(cards.map((card) => card.kind));
-  const missingRequired = settings.requiredEvidenceKinds.filter(
-    (kind) => !presentKinds.has(kind)
-  );
-  const strongCards = cards.filter((card) => card.strength === 'strong').length;
-  const chronologicalEvents = timeline.filter((event) => event.date).length;
-  const boundaryReady = aiBoundary.trim().length >= 40;
-  const citationCount = cards.filter((card) => card.kind === 'citation').length;
-  const processCount = cards.filter(
-    (card) => card.kind === 'writing-process'
-  ).length;
-  const aiUseCount = cards.filter((card) => card.kind === 'ai-use').length;
-  const listSeparator = activeDateLocale.startsWith('zh') ? '、' : ', ';
-
-  const score = Math.max(
-    8,
-    Math.min(
-      94,
-      Math.round(
-        22 +
-          Math.min(files.length, 8) * 4 +
-          Math.min(cards.length, 10) * 3 +
-          strongCards * 5 +
-          Math.min(chronologicalEvents, 8) * 4 +
-          (boundaryReady ? 14 : 0) +
-          (citationCount >= 2 ? 8 : 0) +
-          (processCount >= 2 ? 6 : 0) +
-          (aiUseCount ? 4 : 0) -
-          missingRequired.length * 7
-      )
-    )
-  );
-
-  const riskItems = [
-    missingRequired.length
-      ? t('analysis.local.riskMissing', {
-          kinds: missingRequired
-            .map((kind) => t(`evidenceKinds.${kind}`))
-            .join(listSeparator),
-        })
-      : t('analysis.local.riskCovered'),
-    chronologicalEvents < 4
-      ? t('analysis.local.riskFewTimeline')
-      : t('analysis.local.riskTimelineOk'),
-    boundaryReady
-      ? t('analysis.local.riskBoundaryOk')
-      : t('analysis.local.riskBoundaryShort'),
-  ];
-
-  if (settings.includeCitationAudit && citationCount < 2) {
-    riskItems.push(t('analysis.local.riskSourceShort'));
-  }
-
-  return {
-    trustScore: score,
-    summary:
-      score >= 75
-        ? t('analysis.local.summaryHigh')
-        : score >= 50
-          ? t('analysis.local.summaryMid')
-          : t('analysis.local.summaryLow'),
-    riskItems,
-    timelineFindings: [
-      chronologicalEvents
-        ? t('analysis.local.timelineEvents', { count: chronologicalEvents })
-        : t('analysis.local.timelineNoEvents'),
-      processCount
-        ? t('analysis.local.timelineHasDraft')
-        : t('analysis.local.timelineNoDraft'),
-      cards.some((card) => card.kind === 'school')
-        ? t('analysis.local.timelineHasFeedback')
-        : t('analysis.local.timelineNoFeedback'),
-    ],
-    evidenceGaps: missingRequired.length
-      ? missingRequired.map((kind) =>
-          t('analysis.local.gapSupplement', {
-            kind: t(`evidenceKinds.${kind}`),
-          })
-        )
-      : [t('analysis.local.gapWriteAppeal')],
-    appealOutline: t.raw('analysis.local.appealOutline') as string[],
-    aiBoundaryStatement:
-      aiBoundary.trim() || t('analysis.local.aiBoundaryStatement'),
-    exportChecklist: t.raw('analysis.local.exportChecklist') as string[],
-    providerStatus: 'local',
-  };
-}
 
 export function StudyTraceWorkspace({
   projectId,
@@ -789,8 +109,7 @@ export function StudyTraceWorkspace({
   const locale = useLocale();
 
   // Keep the parameter-free date formatters in sync with the active locale.
-  activeDateLocale = locale === 'zh' ? 'zh-CN' : 'en';
-  unrecognizedTimeLabel = t('date.unknown');
+  setActiveDateFormatting(locale === 'zh' ? 'zh-CN' : 'en', t('date.unknown'));
 
   const [assignmentTitle, setAssignmentTitle] = useState('');
   const [courseName, setCourseName] = useState('');
@@ -808,6 +127,7 @@ export function StudyTraceWorkspace({
     getInitialAnalysis(t)
   );
   const [activeTab, setActiveTab] = useState('upload');
+  const [hasAnalyzed, setHasAnalyzed] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [isLoading, setIsLoading] = useState(Boolean(projectId));
@@ -1288,6 +608,12 @@ export function StudyTraceWorkspace({
     setStatusMessage(t('workspace.upload.status.organizing'));
     const parsedFiles: UploadedEvidenceFile[] = [];
     const fallbackFiles: UploadedEvidenceFile[] = [];
+    // Dedupe by content hash so re-uploading identical files never charges
+    // ingest credits twice or produces duplicate cards.
+    const knownChecksums = new Set(
+      files.map((file) => file.checksum).filter(Boolean)
+    );
+    let skippedDuplicates = 0;
 
     for (const [index, file] of list.entries()) {
       const fallbackCategory = guessEvidenceKind(file);
@@ -1304,6 +630,15 @@ export function StudyTraceWorkspace({
         extractFileText(file),
         sha256File(file),
       ]);
+
+      if (checksum && knownChecksums.has(checksum)) {
+        skippedDuplicates += 1;
+        continue;
+      }
+      if (checksum) {
+        knownChecksums.add(checksum);
+      }
+
       const uploadedFile: UploadedEvidenceFile = {
         id: newId(),
         name: file.name,
@@ -1322,6 +657,15 @@ export function StudyTraceWorkspace({
         ...uploadedFile,
         category: fallbackCategory,
       });
+    }
+
+    if (!parsedFiles.length) {
+      setStatusMessage(
+        t('workspace.upload.status.allDuplicates', {
+          count: skippedDuplicates,
+        })
+      );
+      return;
     }
 
     let nextFiles = fallbackFiles;
@@ -1376,8 +720,13 @@ export function StudyTraceWorkspace({
     });
 
     setAnalysis(nextAnalysis);
+    const duplicateNote = skippedDuplicates
+      ? ` ${t('workspace.upload.status.duplicatesSkipped', {
+          count: skippedDuplicates,
+        })}`
+      : '';
     setStatusMessage(
-      `${nextStatus} ${t('workspace.upload.status.reportReady', {
+      `${nextStatus}${duplicateNote} ${t('workspace.upload.status.reportReady', {
         score: nextAnalysis.trustScore,
       })}`
     );
@@ -1457,10 +806,50 @@ export function StudyTraceWorkspace({
 
   const deleteCard = (id: string) => {
     setCards((prev) => prev.filter((card) => card.id !== id));
+    // Detach the card from any timeline events referencing it.
+    setTimeline((prev) =>
+      prev.map((event) =>
+        event.cardIds?.includes(id)
+          ? { ...event, cardIds: event.cardIds.filter((cid) => cid !== id) }
+          : event
+      )
+    );
   };
 
   const deleteTimelineEvent = (id: string) => {
     setTimeline((prev) => prev.filter((event) => event.id !== id));
+  };
+
+  // Deleting a file also removes its derived cards and timeline events, so no
+  // orphaned evidence stays behind. Manual entries are never touched.
+  const deleteFile = (id: string) => {
+    const removedCardIds = new Set(
+      cards.filter((card) => card.fileId === id).map((card) => card.id)
+    );
+
+    setFiles((prev) => prev.filter((file) => file.id !== id));
+    setCards((prev) => prev.filter((card) => card.fileId !== id));
+    setTimeline((prev) =>
+      prev
+        // Auto-generated events reference exactly the removed card(s); events
+        // whose every linked card was removed go away with the file.
+        .filter(
+          (event) =>
+            !event.cardIds?.length ||
+            !event.cardIds.every((cid) => removedCardIds.has(cid))
+        )
+        .map((event) =>
+          event.cardIds?.some((cid) => removedCardIds.has(cid))
+            ? {
+                ...event,
+                cardIds: event.cardIds.filter(
+                  (cid) => !removedCardIds.has(cid)
+                ),
+              }
+            : event
+        )
+    );
+    setStatusMessage(t('workspace.upload.status.fileRemoved'));
   };
 
   const runAnalysis = async () => {
@@ -1530,9 +919,58 @@ export function StudyTraceWorkspace({
       );
     } finally {
       setIsAnalyzing(false);
+      setHasAnalyzed(true);
       setActiveTab('report');
     }
   };
+
+  const analysisReady = hasAnalyzed || analysis.providerStatus === 'ai';
+  const hasMaterials = cards.length > 0 || files.length > 0;
+  const nextStep: 'upload' | 'analyze' | 'export' = !hasMaterials
+    ? 'upload'
+    : !analysisReady
+      ? 'analyze'
+      : 'export';
+
+  const guidedSteps = [
+    {
+      key: 'upload',
+      tab: 'upload',
+      label: t('workspace.steps.upload'),
+      done: hasMaterials,
+    },
+    {
+      key: 'review',
+      tab: 'cards',
+      label: t('workspace.steps.review'),
+      done: hasMaterials && analysisReady,
+    },
+    {
+      key: 'export',
+      tab: 'report',
+      label: t('workspace.steps.export'),
+      done: analysisReady,
+    },
+  ];
+
+  const handleNextStep = () => {
+    if (nextStep === 'upload') {
+      setActiveTab('upload');
+      return;
+    }
+    if (nextStep === 'analyze') {
+      void runAnalysis();
+      return;
+    }
+    setActiveTab('report');
+  };
+
+  const nextStepLabel =
+    nextStep === 'upload'
+      ? t('workspace.sidebar.nextUpload')
+      : nextStep === 'analyze'
+        ? t('workspace.sidebar.generate')
+        : t('workspace.sidebar.nextExport');
 
   const report = useMemo(() => {
     const reportCards =
@@ -1569,6 +1007,16 @@ export function StudyTraceWorkspace({
     const notFilled = t('reportDoc.notFilled');
     const citationCards = cards.filter((card) => card.kind === 'citation');
     const aiUseCards = cards.filter((card) => card.kind === 'ai-use');
+    const aiPolicyLabel = t(
+      settings.aiPolicy === 'none'
+        ? 'workspace.sidebar.policyNone'
+        : settings.aiPolicy === 'drafting-with-disclosure'
+          ? 'workspace.sidebar.policyDisclosure'
+          : 'workspace.sidebar.policyAssistive'
+    );
+    const detectorCaveatLine = settings.includeDetectorCaveat
+      ? `${t('reportDoc.detectorCaveat')}\n\n`
+      : '';
     const riskSection = showInternalRisks
       ? `
 ## ${t('reportDoc.riskHeading')}
@@ -1611,6 +1059,8 @@ ${citationCards.length ? t('reportDoc.citationSummary', { count: citationCards.l
 
 ## ${t('reportDoc.aiBoundaryHeading')}
 
+- ${t('reportDoc.aiPolicyLabel')}: ${aiPolicyLabel}
+
 ${analysis.aiBoundaryStatement || aiBoundary || notFilled}
 
 ${aiUseCards.length ? t('reportDoc.aiUseSummary', { count: aiUseCards.length }) : t('reportDoc.noAiUseSummary')}
@@ -1639,7 +1089,7 @@ ${checklistSection}
 
 ## ${t('reportDoc.disclaimerHeading')}
 
-${t('reportDoc.disclaimer')}
+${detectorCaveatLine}${t('reportDoc.disclaimer')}
 `;
   }, [
     aiBoundary,
@@ -1652,6 +1102,8 @@ ${t('reportDoc.disclaimer')}
     institutionPolicy,
     processConclusion,
     reportVariant,
+    settings.aiPolicy,
+    settings.includeDetectorCaveat,
     sortedTimeline,
     submittedAt,
     t,
@@ -2016,6 +1468,46 @@ ${t('reportDoc.disclaimer')}
             </CardHeader>
           </Card>
 
+          <div className="studytrace-no-print grid gap-2 md:grid-cols-3">
+            {guidedSteps.map((step, index) => {
+              const isCurrent =
+                (nextStep === 'upload' && step.key === 'upload') ||
+                (nextStep === 'analyze' && step.key === 'review') ||
+                (nextStep === 'export' && step.key === 'export');
+              return (
+                <button
+                  key={step.key}
+                  type="button"
+                  onClick={() => setActiveTab(step.tab)}
+                  className={cn(
+                    'flex items-center gap-3 rounded-lg border p-3 text-left transition',
+                    isCurrent
+                      ? 'border-primary bg-primary/5 shadow-sm'
+                      : 'bg-background hover:bg-muted/40'
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'flex size-7 shrink-0 items-center justify-center rounded-full text-sm font-semibold',
+                      step.done
+                        ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400'
+                        : isCurrent
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted text-muted-foreground'
+                    )}
+                  >
+                    {step.done ? (
+                      <CheckCircle2 className="size-4" />
+                    ) : (
+                      index + 1
+                    )}
+                  </span>
+                  <span className="text-sm font-medium">{step.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="studytrace-no-print grid h-auto w-full grid-cols-2 gap-1 md:grid-cols-5">
               <TabsTrigger value="upload">
@@ -2140,13 +1632,7 @@ ${t('reportDoc.disclaimer')}
                                     aria-label={t(
                                       'workspace.upload.deleteAria'
                                     )}
-                                    onClick={() =>
-                                      setFiles((prev) =>
-                                        prev.filter(
-                                          (item) => item.id !== file.id
-                                        )
-                                      )
-                                    }
+                                    onClick={() => deleteFile(file.id)}
                                   >
                                     <Trash2 className="size-4" />
                                   </Button>
@@ -2716,16 +2202,18 @@ ${t('reportDoc.disclaimer')}
                   </div>
 
                   <div className="studytrace-no-print flex flex-wrap gap-2">
-                    <Button onClick={runAnalysis} disabled={isAnalyzing}>
-                      {isAnalyzing ? (
-                        <RefreshCw className="size-4 animate-spin" />
-                      ) : (
-                        <BrainCircuit className="size-4" />
-                      )}
-                      {t('workspace.report.generate')}
-                    </Button>
+                    {!analysisReady ? (
+                      <Button onClick={runAnalysis} disabled={isAnalyzing}>
+                        {isAnalyzing ? (
+                          <RefreshCw className="size-4 animate-spin" />
+                        ) : (
+                          <BrainCircuit className="size-4" />
+                        )}
+                        {t('workspace.report.generate')}
+                      </Button>
+                    ) : null}
                     <Button
-                      variant="outline"
+                      variant={analysisReady ? 'default' : 'outline'}
                       onClick={exportPdf}
                       disabled={isExportingPdf}
                     >
@@ -2881,15 +2369,19 @@ ${t('reportDoc.disclaimer')}
               ))}
               <Button
                 className="w-full"
-                onClick={runAnalysis}
+                onClick={handleNextStep}
                 disabled={isAnalyzing}
               >
                 {isAnalyzing ? (
                   <RefreshCw className="size-4 animate-spin" />
-                ) : (
+                ) : nextStep === 'upload' ? (
+                  <UploadCloud className="size-4" />
+                ) : nextStep === 'analyze' ? (
                   <BrainCircuit className="size-4" />
+                ) : (
+                  <FileDown className="size-4" />
                 )}
-                {t('workspace.sidebar.generate')}
+                {nextStepLabel}
               </Button>
               {statusMessage ? (
                 <p className="text-muted-foreground text-sm leading-6">

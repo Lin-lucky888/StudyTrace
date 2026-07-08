@@ -165,7 +165,10 @@
         "reportReady": "报告草稿已准备好，本地评分 {score}/100。",
         "needAuth": "登录后可使用 AI ingest；当前已生成本地证据卡和时间线节点。",
         "needCredits": "AI ingest 需要可用积分；当前已生成本地证据卡和时间线节点。",
-        "unavailable": "AI ingest 暂不可用，已生成本地证据卡和时间线节点。"
+        "unavailable": "AI ingest 暂不可用，已生成本地证据卡和时间线节点。",
+        "allDuplicates": "选中的 {count} 个文件之前已上传（内容指纹相同），未重复添加。",
+        "duplicatesSkipped": "已跳过 {count} 个重复文件。",
+        "fileRemoved": "已删除该文件及其关联的证据卡和时间线节点。"
       }
     },
     "cards": {
@@ -306,10 +309,17 @@
       "needCredits": "AI 分析需要可用积分；当前已生成本地版本。",
       "unavailable": "AI 分析暂不可用，已生成本地版本。"
     },
+    "steps": {
+      "upload": "上传材料",
+      "review": "核对证据与时间线",
+      "export": "分析并导出报告"
+    },
     "sidebar": {
       "coverage": "完整度",
       "coverageProgress": "{ready}/{total} 类核心证据已就绪",
       "generate": "生成风险解释",
+      "nextUpload": "先上传材料",
+      "nextExport": "查看并导出报告",
       "settingsTitle": "配置项",
       "settingsDesc": "参考同类产品的常见配置，先做成前端工作流参数。",
       "evidenceStandard": "证据标准",
@@ -368,6 +378,8 @@
       "riskBoundaryOk": "AI 使用边界有基本说明，建议继续写明具体工具、用途和未用于代写的范围。",
       "riskBoundaryShort": "AI 使用边界说明太短，容易被解读为回避关键问题。",
       "riskSourceShort": "引用来源证据不足，建议上传参考文献、阅读笔记、数据库检索截图或网页保存记录。",
+      "riskStrictStrong": "严格标准下强证据不足 2 项，建议补充带编辑历史的草稿、引用记录或学校往来邮件。",
+      "riskHighSensitivity": "高敏感度模式：所有未经核实的材料在提交前都应逐一交叉核对。",
       "summaryHigh": "材料已经接近可提交状态，重点检查时间线一致性、引用来源可验证性和 AI 使用声明措辞。",
       "summaryMid": "材料有初步可信度，但还需要补足关键证据并把每项材料与作业过程对应起来。",
       "summaryLow": "当前材料仍偏分散，建议先建立完整时间线，再补齐草稿、来源和 AI 边界证据。",
@@ -415,6 +427,7 @@
     "citationSummary": "当前有 {count} 张引用证据卡。导出前应逐条确认 DOI、出版社页面、数据库记录或阅读摘录。",
     "noCitationSummary": "当前还没有引用证据卡，建议补充文献 PDF、书目信息、数据库页面或引用库文件。",
     "aiBoundaryHeading": "AI 使用边界",
+    "aiPolicyLabel": "声明的 AI 使用政策",
     "aiUseSummary": "当前有 {count} 张 AI 使用记录卡。建议确认工具、日期、用途和是否进入最终稿。",
     "noAiUseSummary": "当前还没有 AI 使用记录卡。如有使用 ChatGPT、Claude、Grammarly 等工具，建议补充使用记录或说明。",
     "cardsHeading": "证据卡",
@@ -442,6 +455,7 @@
     "appealHeading": "申诉陈述结构",
     "checklistHeading": "导出前检查",
     "disclaimerHeading": "免责声明",
+    "detectorCaveat": "说明：AI 检测器存在误判可能。本报告请求基于过程证据进行人工复核，而非仅依赖检测器输出。",
     "disclaimer": "本报告不判断是否存在学术不端，仅整理可核验材料，用于解释写作过程和辅助沟通。"
   },
   "scorePanel": {

@@ -173,7 +173,10 @@
         "reportReady": "Report draft is ready with a local score of {score}/100.",
         "needAuth": "Sign in to use AI ingest; local evidence cards and timeline nodes were generated.",
         "needCredits": "AI ingest requires available credits; local evidence cards and timeline nodes were generated.",
-        "unavailable": "AI ingest is unavailable; local evidence cards and timeline nodes were generated."
+        "unavailable": "AI ingest is unavailable; local evidence cards and timeline nodes were generated.",
+        "allDuplicates": "{count, plural, one {The selected file was} other {All # selected files were}} already uploaded (same content fingerprint); nothing was added.",
+        "duplicatesSkipped": "Skipped {count} duplicate {count, plural, one {file} other {files}}.",
+        "fileRemoved": "Removed the file together with its evidence cards and timeline nodes."
       }
     },
     "cards": {
@@ -314,10 +317,17 @@
       "needCredits": "AI analysis requires available credits; a local version was generated.",
       "unavailable": "AI analysis is unavailable; a local version was generated."
     },
+    "steps": {
+      "upload": "Upload materials",
+      "review": "Review evidence & timeline",
+      "export": "Analyze & export report"
+    },
     "sidebar": {
       "coverage": "Completeness",
       "coverageProgress": "{ready}/{total} core evidence types ready",
       "generate": "Generate risk explanation",
+      "nextUpload": "Upload materials to start",
+      "nextExport": "View & export report",
       "settingsTitle": "Configuration",
       "settingsDesc": "Common configurations from comparable products, wired first as front-end workflow parameters.",
       "evidenceStandard": "Evidence standard",
@@ -379,6 +389,8 @@
       "riskBoundaryOk": "The AI-use boundary has a basic statement; continue specifying tools, purposes, and the scope that was not ghost-written.",
       "riskBoundaryShort": "The AI-use boundary statement is too short and may read as avoiding the key question.",
       "riskSourceShort": "Citation source evidence is insufficient. Upload references, reading notes, database search screenshots, or saved web pages.",
+      "riskStrictStrong": "Strict standard: fewer than 2 strong evidence items. Add drafts with edit history, citation records, or school communications.",
+      "riskHighSensitivity": "High sensitivity mode: treat every unverified material as needing cross-checking before submission.",
       "summaryHigh": "Materials are close to submittable. Focus on timeline consistency, verifiable citation sources, and the wording of the AI-use statement.",
       "summaryMid": "Materials have initial credibility, but you still need to add key evidence and map each item to the writing process.",
       "summaryLow": "Materials are still scattered. Build a complete timeline first, then add drafts, sources, and AI-boundary evidence.",
@@ -426,6 +438,7 @@
     "citationSummary": "There are {count} citation evidence cards. Before export, verify DOI, publisher page, database record, or reading excerpts for each item.",
     "noCitationSummary": "No citation evidence card yet. Add literature PDFs, bibliography records, database pages, or citation library files.",
     "aiBoundaryHeading": "AI use boundary",
+    "aiPolicyLabel": "Declared AI policy",
     "aiUseSummary": "There are {count} AI-use record cards. Confirm the tool, date, purpose, and whether it entered the final text.",
     "noAiUseSummary": "No AI-use record card yet. If ChatGPT, Claude, Grammarly, or similar tools were used, add logs or a statement.",
     "cardsHeading": "Evidence cards",
@@ -453,6 +466,7 @@
     "appealHeading": "Appeal statement outline",
     "checklistHeading": "Pre-export checklist",
     "disclaimerHeading": "Disclaimer",
+    "detectorCaveat": "Note: AI detectors can produce false positives. This report requests a human review of the process evidence rather than relying solely on detector output.",
     "disclaimer": "This report does not determine whether academic misconduct occurred. It only organizes verifiable materials to explain the writing process and support communication."
   },
   "scorePanel": {
