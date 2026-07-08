@@ -82,6 +82,14 @@ type StudyTraceIngestPayload = {
   settings?: unknown;
 };
 
+type IngestAssignmentInfo = {
+  title: string;
+  courseName: string;
+  school: string;
+  studentId: string;
+  submittedAt: string;
+};
+
 type StudyTraceIngestResult = {
   files: {
     id: string;
@@ -89,6 +97,7 @@ type StudyTraceIngestResult = {
   }[];
   evidenceCards: EvidenceCard[];
   timelineEvents: TimelineEvent[];
+  assignment?: IngestAssignmentInfo;
   providerStatus?: string;
 };
 
@@ -281,20 +290,28 @@ function extractJsonObject(text: string) {
 }
 
 function getPromptFiles(files?: IngestFile[]) {
-  return (Array.isArray(files) ? files : [])
+  const list = (Array.isArray(files) ? files : [])
     .filter((file) => file?.id)
-    .slice(0, MAX_FILES)
-    .map((file) => ({
-      id: file.id,
-      name: normalizeText(file.name, 'Untitled file', 240),
-      size: Number(file.size) || 0,
-      type: normalizeText(file.type, '', 120),
-      extension: normalizeText(file.extension, '', 40),
-      lastModified: normalizeText(file.lastModified, '', 80),
-      lastModifiedLabel: normalizeText(file.lastModifiedLabel, '', 80),
-      checksum: normalizeText(file.checksum, '', 120),
-      extractedText: normalizeText(file.extractedText, '', MAX_TEXT_PER_FILE),
-    }));
+    .slice(0, MAX_FILES);
+
+  // Share the text budget across files so large batches never blow past the
+  // prompt limit and starve the model's output window.
+  const perFileTextBudget = Math.max(
+    1_500,
+    Math.min(MAX_TEXT_PER_FILE, Math.floor(60_000 / Math.max(list.length, 1)))
+  );
+
+  return list.map((file) => ({
+    id: file.id,
+    name: normalizeText(file.name, 'Untitled file', 240),
+    size: Number(file.size) || 0,
+    type: normalizeText(file.type, '', 120),
+    extension: normalizeText(file.extension, '', 40),
+    lastModified: normalizeText(file.lastModified, '', 80),
+    lastModifiedLabel: normalizeText(file.lastModifiedLabel, '', 80),
+    checksum: normalizeText(file.checksum, '', 120),
+    extractedText: normalizeText(file.extractedText, '', perFileTextBudget),
+  }));
 }
 
 function buildSystemPrompt(language: string) {
@@ -306,8 +323,9 @@ function buildSystemPrompt(language: string) {
     'If a file has little or no readable text, mark it as weak or metadata-only instead of guessing its contents.',
     'Classify uploads into six user-facing groups: paper, citation, writing-process, ai-use, school, appeal.',
     'Evidence cards are the core product. Treat each card like a legal evidence card that states what it proves, which paragraph it supports, its strength, risks, submit status, and next action.',
-    'Return strict JSON only with these keys: files, evidenceCards, timelineEvents.',
+    'Return strict JSON only with these keys: files, evidenceCards, timelineEvents, assignment.',
     'files must be an array of {id, category}. category must be one of paper, citation, writing-process, ai-use, school, appeal.',
+    'assignment must be {title, courseName, school, studentId, submittedAt}: basic info extracted verbatim from the uploaded content (cover pages, headers, assignment briefs, school emails). Examples: course codes like "COMP5703", school names, student IDs near labels like SID/Student ID/学号. Use an empty string for anything not explicitly present; never guess. submittedAt must be an ISO datetime or empty string.',
     'evidenceCards must use exactly this shape: {id, title, kind, source, fileId, summary, notes, strength, proofTarget, paperLocator, submitStatus, actionItems, tags, riskFlags}.',
     'submitStatus must be ready, needs-more, or do-not-submit. Use ready only when the card is directly suitable for an appeal package.',
     'timelineEvents must use exactly this shape: {id, date, label, detail, source, strength, phase, cardIds}. phase must be one of topic, research, reading, draft, ai-assist, revision, citation-check, submission, challenge-appeal.',
@@ -373,7 +391,9 @@ async function callStudyTraceModel(
           type: 'disabled',
         },
         temperature: 0.1,
-        max_completion_tokens: 4000,
+        // 1-3 cards per file plus timeline events: large batches need far more
+        // than 4k output tokens, otherwise the JSON gets truncated mid-stream.
+        max_completion_tokens: 16_000,
       }),
     }
   );
@@ -484,6 +504,18 @@ function normalizeIngestResult(
         .slice(0, 40)
     : [];
 
+  const rawAssignment =
+    result.assignment && typeof result.assignment === 'object'
+      ? result.assignment
+      : {};
+  const assignment: IngestAssignmentInfo = {
+    title: normalizeText(rawAssignment.title, '', 240),
+    courseName: normalizeText(rawAssignment.courseName, '', 160),
+    school: normalizeText(rawAssignment.school, '', 160),
+    studentId: normalizeText(rawAssignment.studentId, '', 80),
+    submittedAt: normalizeDate(rawAssignment.submittedAt),
+  };
+
   return {
     files: Array.from(categoryByFileId.entries()).map(([id, category]) => ({
       id,
@@ -491,6 +523,7 @@ function normalizeIngestResult(
     })),
     evidenceCards,
     timelineEvents,
+    assignment,
     providerStatus: 'ai',
   };
 }

@@ -9,10 +9,38 @@ import {
 } from '@/shared/models/studytrace';
 import { getUserInfo } from '@/shared/models/user';
 
+type RiskDimensionKey =
+  | 'citation-authenticity'
+  | 'citation-format'
+  | 'ai-use'
+  | 'process-gap'
+  | 'appeal-completeness';
+
+type RiskLevel = 'low' | 'medium' | 'high';
+
+type RiskDimension = {
+  key: RiskDimensionKey;
+  level: RiskLevel;
+  finding: string;
+  suggestion?: string;
+};
+
+const RISK_DIMENSION_KEYS: RiskDimensionKey[] = [
+  'citation-authenticity',
+  'citation-format',
+  'ai-use',
+  'process-gap',
+  'appeal-completeness',
+];
+
+const RISK_LEVELS: RiskLevel[] = ['low', 'medium', 'high'];
+
 type StudyTraceAnalysis = {
   trustScore: number;
   summary: string;
   riskItems: string[];
+  riskDimensions?: RiskDimension[];
+  processConclusion?: string;
   timelineFindings: string[];
   evidenceGaps: string[];
   appealOutline: string[];
@@ -27,6 +55,8 @@ type StudyTracePayload = {
   assignment?: {
     title?: string;
     courseName?: string;
+    school?: string;
+    studentId?: string;
     submittedAt?: string;
     institutionPolicy?: string;
     concern?: string;
@@ -76,6 +106,60 @@ const DEFAULT_ANALYSIS: StudyTraceAnalysis = {
   providerStatus: 'local',
 };
 
+function normalizeRiskDimensions(
+  value: any,
+  fallback?: RiskDimension[]
+): RiskDimension[] | undefined {
+  // Models sometimes return an object keyed by dimension name instead of an
+  // array; accept both shapes.
+  const entries: any[] = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object'
+      ? Object.entries(value).map(([key, item]) =>
+          item && typeof item === 'object'
+            ? { key, ...item }
+            : { key, finding: item }
+        )
+      : [];
+  if (!entries.length) return fallback;
+
+  const byKey = new Map<RiskDimensionKey, RiskDimension>();
+  for (const item of entries) {
+    const key =
+      typeof item?.key === 'string'
+        ? (item.key.trim().toLowerCase().replace(/_/g, '-') as RiskDimensionKey)
+        : ('' as RiskDimensionKey);
+    if (!RISK_DIMENSION_KEYS.includes(key) || byKey.has(key)) continue;
+
+    const finding = String(item?.finding || '').trim();
+    if (!finding) continue;
+
+    const level =
+      typeof item?.level === 'string' &&
+      RISK_LEVELS.includes(item.level.trim().toLowerCase() as RiskLevel)
+        ? (item.level.trim().toLowerCase() as RiskLevel)
+        : 'medium';
+
+    byKey.set(key, {
+      key,
+      level,
+      finding: finding.slice(0, 600),
+      suggestion: String(item?.suggestion || '').trim().slice(0, 600) || undefined,
+    });
+  }
+
+  if (!byKey.size) return fallback;
+
+  // Keep the canonical dimension order and backfill missing dimensions from
+  // the local fallback so the UI always shows all five.
+  const fallbackByKey = new Map(
+    (fallback || []).map((dimension) => [dimension.key, dimension])
+  );
+  return RISK_DIMENSION_KEYS.map(
+    (key) => byKey.get(key) || fallbackByKey.get(key)
+  ).filter(Boolean) as RiskDimension[];
+}
+
 function normalizeAnalysis(value: any, fallback: StudyTraceAnalysis) {
   const analysis = value && typeof value === 'object' ? value : {};
 
@@ -102,6 +186,13 @@ function normalizeAnalysis(value: any, fallback: StudyTraceAnalysis) {
       analysis.exportChecklist,
       fallback.exportChecklist
     ),
+    riskDimensions: normalizeRiskDimensions(
+      analysis.riskDimensions,
+      fallback.riskDimensions
+    ),
+    processConclusion:
+      String(analysis.processConclusion || '').trim().slice(0, 600) ||
+      fallback.processConclusion,
     providerStatus: analysis.providerStatus || fallback.providerStatus || 'ai',
   } satisfies StudyTraceAnalysis;
 }
@@ -160,7 +251,9 @@ function buildSystemPrompt(language: string) {
     'Risk explanation must cover these dimensions when relevant: citation authenticity, citation format, AI-use explanation, writing-process gaps, and appeal-material completeness.',
     'This product does not decide whether academic misconduct occurred. It organizes verifiable materials for explanation and communication.',
     'Do not write a complete appeal letter. Return analysis pieces that the front-end report template can assemble.',
-    'Return strict JSON only with these keys: trustScore, summary, riskItems, timelineFindings, evidenceGaps, appealOutline, aiBoundaryStatement, exportChecklist.',
+    'Return strict JSON only with these keys: trustScore, summary, riskItems, riskDimensions, processConclusion, timelineFindings, evidenceGaps, appealOutline, aiBoundaryStatement, exportChecklist.',
+    'riskDimensions must be a JSON array of exactly five objects, one per key in this order: citation-authenticity, citation-format, ai-use, process-gap, appeal-completeness. Each object is {key, level, finding, suggestion}. level must be low, medium, or high. finding explains the current evidence situation for that dimension; suggestion is the single most useful next step. Reference concrete evidence cards or timeline events by title when possible.',
+    'processConclusion must be one factual sentence summarizing the writing process, built only from provided timeline events and evidence cards, e.g. counts of dated writing records, draft versions, verifiable citations, and where AI use is concentrated. If the timeline is empty, say the process record is not yet established.',
     `trustScore must be an integer from 0 to 100. All text fields and list items must be concise ${language} strings.`,
   ].join('\n');
 }
@@ -248,7 +341,9 @@ async function callStudyTraceModel(
           type: 'disabled',
         },
         temperature: 0.2,
-        max_completion_tokens: 3000,
+        // The structured five-dimension risk output plus lists needs more
+        // room than the old flat schema; truncated JSON fails the whole run.
+        max_completion_tokens: 6000,
       }),
     }
   );

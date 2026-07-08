@@ -7,17 +7,20 @@ import {
   ArrowLeft,
   BrainCircuit,
   CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ClipboardCheck,
   Clock3,
   Cloud,
   CloudOff,
   Download,
   EyeOff,
-  Link2,
   FileDown,
   Files,
   FileText,
   History,
+  Link2,
   Loader2,
   Plus,
   Printer,
@@ -62,12 +65,15 @@ import {
   formatDateLabel,
   formatFileSize,
   getEvidenceKind,
+  getExtension,
   getInitialAnalysis,
   getLocalAnalysis,
   getSubmitStatus,
   getTimelinePhase,
+  guessEvidenceKind,
   isQuotaExceededError,
   newId,
+  riskDimensionKeys,
   sanitizeSavedAnalysis,
   sanitizeSavedCard,
   sanitizeSavedFile,
@@ -76,14 +82,12 @@ import {
   sha256File,
   shortChecksum,
   STORAGE_KEY,
-  stripExtractedTextFromFiles,
   strengthFromKind,
+  stripExtractedTextFromFiles,
   takeSavedItems,
   timelinePhaseKeys,
   toDateTimeInput,
   truncateSavedText,
-  getExtension,
-  guessEvidenceKind,
   type EvidenceCard,
   type EvidenceKind,
   type EvidenceStrength,
@@ -97,7 +101,7 @@ import {
   type TimelinePhase,
   type UploadedEvidenceFile,
 } from './lib';
-import { exportReportPdf } from './report-pdf';
+import { exportReportPdf, openReportPdfPrintFallback } from './report-pdf';
 
 export function StudyTraceWorkspace({
   projectId,
@@ -114,6 +118,8 @@ export function StudyTraceWorkspace({
 
   const [assignmentTitle, setAssignmentTitle] = useState('');
   const [courseName, setCourseName] = useState('');
+  const [school, setSchool] = useState('');
+  const [studentId, setStudentId] = useState('');
   const [submittedAt, setSubmittedAt] = useState('');
   const [institutionPolicy, setInstitutionPolicy] = useState('');
   const [concern, setConcern] = useState('');
@@ -133,6 +139,23 @@ export function StudyTraceWorkspace({
   const [statusMessage, setStatusMessage] = useState('');
   const [timelineView, setTimelineView] = useState<'phase' | 'time'>('phase');
   const [highlightedCardId, setHighlightedCardId] = useState('');
+  const [activeCardId, setActiveCardId] = useState('');
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  // null = auto: open only when the user already filled something in
+  // (aiBoundary excluded because it has a default template value).
+  const [basicOpen, setBasicOpen] = useState<boolean | null>(null);
+  const isBasicOpen =
+    basicOpen ??
+    Boolean(
+      assignmentTitle ||
+        courseName ||
+        school ||
+        studentId ||
+        submittedAt ||
+        concern ||
+        institutionPolicy
+    );
   const [isLoading, setIsLoading] = useState(Boolean(projectId));
   const [cloudMode, setCloudMode] = useState(false);
   const [syncState, setSyncState] = useState<'idle' | 'saving' | 'saved'>(
@@ -170,6 +193,8 @@ export function StudyTraceWorkspace({
       const data = JSON.parse(saved);
       setAssignmentTitle(data.assignmentTitle || '');
       setCourseName(data.courseName || '');
+      setSchool(data.school || '');
+      setStudentId(data.studentId || '');
       setSubmittedAt(data.submittedAt || '');
       setInstitutionPolicy(data.institutionPolicy || '');
       setConcern(data.concern || '');
@@ -199,6 +224,8 @@ export function StudyTraceWorkspace({
       const project = snapshot?.project || {};
       setAssignmentTitle(project.title || '');
       setCourseName(project.courseName || '');
+      setSchool(project.settings?.school || '');
+      setStudentId(project.settings?.studentId || '');
       setSubmittedAt(project.settings?.submittedAt || '');
       setInstitutionPolicy(project.institutionPolicy || '');
       setConcern(project.concern || '');
@@ -343,6 +370,8 @@ export function StudyTraceWorkspace({
         settings: {
           ...settings,
           submittedAt,
+          school,
+          studentId,
         },
       },
       files: files.map((file) => ({
@@ -386,6 +415,8 @@ export function StudyTraceWorkspace({
       projectId,
       assignmentTitle,
       courseName,
+      school,
+      studentId,
       submittedAt,
       institutionPolicy,
       concern,
@@ -404,6 +435,8 @@ export function StudyTraceWorkspace({
     const snapshot = {
       assignmentTitle,
       courseName,
+      school,
+      studentId,
       submittedAt,
       institutionPolicy: truncateSavedText(institutionPolicy),
       concern: truncateSavedText(concern),
@@ -430,6 +463,8 @@ export function StudyTraceWorkspace({
           JSON.stringify({
             assignmentTitle,
             courseName,
+            school,
+            studentId,
             submittedAt,
             institutionPolicy: truncateSavedText(institutionPolicy, 400),
             concern: truncateSavedText(concern, 400),
@@ -448,6 +483,8 @@ export function StudyTraceWorkspace({
     storageKey,
     assignmentTitle,
     courseName,
+    school,
+    studentId,
     submittedAt,
     institutionPolicy,
     concern,
@@ -494,6 +531,8 @@ export function StudyTraceWorkspace({
     buildCloudPayload,
     assignmentTitle,
     courseName,
+    school,
+    studentId,
     submittedAt,
     institutionPolicy,
     concern,
@@ -530,6 +569,56 @@ export function StudyTraceWorkspace({
     ? Math.round((coverageReadyCount / coverage.length) * 100)
     : 0;
 
+  // Explanatory numerator/denominator metrics replacing the abstract score.
+  const processMetrics = useMemo(() => {
+    const citations = cards.filter((card) => card.kind === 'citation');
+    const citationsReady = citations.filter(
+      (card) => card.submitStatus === 'ready'
+    ).length;
+    const aiCards = cards.filter((card) => card.kind === 'ai-use');
+    const aiExplained = aiCards.filter(
+      (card) => card.notes.trim().length > 0 || card.submitStatus === 'ready'
+    ).length;
+    const phasesCovered = new Set(
+      timeline.map((event) => event.phase || 'draft')
+    ).size;
+
+    const good = 'text-green-600';
+    const warn = 'text-amber-600';
+
+    return [
+      {
+        key: 'citation',
+        label: t('workspace.metrics.citation'),
+        value: `${citationsReady} / ${citations.length}`,
+        tone:
+          citations.length && citationsReady === citations.length ? good : warn,
+        hint: t('workspace.metrics.citationHint'),
+      },
+      {
+        key: 'phases',
+        label: t('workspace.metrics.phases'),
+        value: `${phasesCovered} / 9`,
+        tone: phasesCovered >= 6 ? good : warn,
+        hint: t('workspace.metrics.phasesHint'),
+      },
+      {
+        key: 'ai',
+        label: t('workspace.metrics.ai'),
+        value: `${aiExplained} / ${aiCards.length}`,
+        tone: aiCards.length && aiExplained === aiCards.length ? good : warn,
+        hint: t('workspace.metrics.aiHint'),
+      },
+      {
+        key: 'coverage',
+        label: t('workspace.metrics.coverage'),
+        value: `${coveragePercent}%`,
+        tone: coveragePercent >= 80 ? good : warn,
+        hint: t('workspace.metrics.coverageHint'),
+      },
+    ];
+  }, [cards, timeline, coveragePercent, t]);
+
   const sortedTimeline = useMemo(
     () =>
       [...timeline].sort((a, b) => {
@@ -558,6 +647,21 @@ export function StudyTraceWorkspace({
     () => new Map(cards.map((card) => [card.id, card.title])),
     [cards]
   );
+
+  const activeCardIndex = cards.findIndex((card) => card.id === activeCardId);
+  const currentCardIndex = activeCardIndex >= 0 ? activeCardIndex : 0;
+  const activeCard = cards[currentCardIndex];
+
+  useEffect(() => {
+    if (!cards.length) {
+      if (activeCardId) setActiveCardId('');
+      return;
+    }
+
+    if (!activeCardId || !cards.some((card) => card.id === activeCardId)) {
+      setActiveCardId(cards[0].id);
+    }
+  }, [activeCardId, cards]);
 
   const groupedFiles = useMemo(
     () =>
@@ -605,6 +709,8 @@ export function StudyTraceWorkspace({
         assignment: {
           title: assignmentTitle,
           courseName,
+          school,
+          studentId,
           submittedAt,
           institutionPolicy,
           concern,
@@ -621,6 +727,43 @@ export function StudyTraceWorkspace({
     }
 
     return result.data.ingest as StudyTraceIngestResult;
+  };
+
+  // Fill empty basic-info fields with values the AI extracted from the
+  // uploaded documents (school, student ID, course, title, submission time).
+  // Never overwrite anything the user already typed.
+  const applyIngestAssignment = (
+    info: StudyTraceIngestResult['assignment']
+  ) => {
+    if (!info) return 0;
+
+    let filled = 0;
+    if (!assignmentTitle && info.title) {
+      setAssignmentTitle(info.title);
+      filled += 1;
+    }
+    if (!courseName && info.courseName) {
+      setCourseName(info.courseName);
+      filled += 1;
+    }
+    if (!school && info.school) {
+      setSchool(info.school);
+      filled += 1;
+    }
+    if (!studentId && info.studentId) {
+      setStudentId(info.studentId);
+      filled += 1;
+    }
+    if (!submittedAt && info.submittedAt) {
+      const parsed = new Date(info.submittedAt);
+      if (!Number.isNaN(parsed.getTime())) {
+        setSubmittedAt(toDateTimeInput(parsed));
+        filled += 1;
+      }
+    }
+
+    if (filled) setBasicOpen(true);
+    return filled;
   };
 
   const handleFiles = async (incomingFiles: FileList | File[]) => {
@@ -720,6 +863,13 @@ export function StudyTraceWorkspace({
           events: nextEvents.length,
         });
       }
+
+      const filledBasic = applyIngestAssignment(ingest.assignment);
+      if (filledBasic) {
+        nextStatus += ` ${t('workspace.upload.status.basicAutoFilled', {
+          count: filledBasic,
+        })}`;
+      }
     } catch (error) {
       nextStatus =
         error instanceof Error && error.message.includes('auth')
@@ -731,6 +881,7 @@ export function StudyTraceWorkspace({
 
     setFiles((prev) => [...nextFiles, ...prev]);
     setCards((prev) => [...nextCards, ...prev]);
+    if (nextCards.length) setActiveCardId(nextCards[0].id);
     setTimeline((prev) => [...nextEvents, ...prev]);
     const nextAnalysis = getLocalAnalysis({
       files: [...nextFiles, ...files],
@@ -748,11 +899,78 @@ export function StudyTraceWorkspace({
         })}`
       : '';
     setStatusMessage(
-      `${nextStatus}${duplicateNote} ${t('workspace.upload.status.reportReady', {
-        score: nextAnalysis.trustScore,
-      })}`
+      `${nextStatus}${duplicateNote} ${t(
+        'workspace.upload.status.reportReady',
+        {
+          score: nextAnalysis.trustScore,
+        }
+      )}`
     );
     setActiveTab('cards');
+  };
+
+  // Re-run AI ingest on the already-uploaded files, replacing file-derived
+  // template cards while keeping manually added cards untouched.
+  const regenerateCards = async () => {
+    if (!files.length || isRegenerating) return;
+    setIsRegenerating(true);
+    setStatusMessage(t('workspace.upload.status.ingesting'));
+    try {
+      const ingest = await requestIngest(files);
+      if (!ingest.evidenceCards?.length) {
+        setStatusMessage(t('workspace.cards.regenEmpty'));
+        return;
+      }
+
+      const newCards = ingest.evidenceCards.map((card) =>
+        enrichEvidenceCard(card, t)
+      );
+      const replacedCardIds = new Set(
+        cards.filter((card) => card.fileId).map((card) => card.id)
+      );
+
+      setFiles((prev) => applyIngestFileCategories(prev, ingest.files));
+      setCards((prev) => [
+        ...newCards,
+        ...prev.filter((card) => !card.fileId),
+      ]);
+
+      const newEvents = ingest.timelineEvents?.length
+        ? ingest.timelineEvents.map(enrichTimelineEvent)
+        : [];
+      setTimeline((prev) => [
+        ...newEvents,
+        // Keep events that are manual or still reference surviving cards.
+        ...prev.filter(
+          (event) =>
+            !event.cardIds?.length ||
+            !event.cardIds.every((cardId) => replacedCardIds.has(cardId))
+        ),
+      ]);
+
+      setActiveCardId(newCards[0].id);
+      const filledBasic = applyIngestAssignment(ingest.assignment);
+      let regenStatus = t('workspace.upload.status.aiGenerated', {
+        cards: newCards.length,
+        events: newEvents.length,
+      });
+      if (filledBasic) {
+        regenStatus += ` ${t('workspace.upload.status.basicAutoFilled', {
+          count: filledBasic,
+        })}`;
+      }
+      setStatusMessage(regenStatus);
+    } catch (error) {
+      setStatusMessage(
+        error instanceof Error && error.message.includes('auth')
+          ? t('workspace.upload.status.needAuth')
+          : error instanceof Error && error.message.includes('credits')
+            ? t('workspace.upload.status.needCredits')
+            : t('workspace.upload.status.unavailable')
+      );
+    } finally {
+      setIsRegenerating(false);
+    }
   };
 
   const addManualCard = () => {
@@ -781,6 +999,7 @@ export function StudyTraceWorkspace({
     );
 
     setCards((prev) => [card, ...prev]);
+    setActiveCardId(card.id);
     setManualCard({
       title: '',
       kind: 'writing-process',
@@ -841,6 +1060,7 @@ export function StudyTraceWorkspace({
   // Jump from a timeline event to one of its linked evidence cards.
   const openCardFromTimeline = (cardId: string) => {
     setActiveTab('cards');
+    setActiveCardId(cardId);
     setHighlightedCardId(cardId);
     window.setTimeout(() => {
       document
@@ -899,7 +1119,15 @@ export function StudyTraceWorkspace({
   };
 
   const deleteCard = (id: string) => {
-    setCards((prev) => prev.filter((card) => card.id !== id));
+    const deletedIndex = cards.findIndex((card) => card.id === id);
+    const nextCards = cards.filter((card) => card.id !== id);
+    setCards(nextCards);
+    if (activeCardId === id) {
+      setActiveCardId(
+        nextCards[Math.min(Math.max(deletedIndex, 0), nextCards.length - 1)]
+          ?.id || ''
+      );
+    }
     // Detach the card from any timeline events referencing it.
     setTimeline((prev) =>
       prev.map((event) =>
@@ -976,9 +1204,13 @@ export function StudyTraceWorkspace({
     const removedCardIds = new Set(
       cards.filter((card) => card.fileId === id).map((card) => card.id)
     );
+    const nextCards = cards.filter((card) => card.fileId !== id);
 
     setFiles((prev) => prev.filter((file) => file.id !== id));
-    setCards((prev) => prev.filter((card) => card.fileId !== id));
+    setCards(nextCards);
+    if (removedCardIds.has(activeCardId)) {
+      setActiveCardId(nextCards[0]?.id || '');
+    }
     setTimeline((prev) =>
       prev
         // Auto-generated events reference exactly the removed card(s); events
@@ -1033,6 +1265,8 @@ export function StudyTraceWorkspace({
           assignment: {
             title: assignmentTitle,
             courseName,
+            school,
+            studentId,
             submittedAt,
             institutionPolicy,
             concern,
@@ -1082,26 +1316,14 @@ export function StudyTraceWorkspace({
       ? 'analyze'
       : 'export';
 
-  const guidedSteps = [
-    {
-      key: 'upload',
-      tab: 'upload',
-      label: t('workspace.steps.upload'),
-      done: hasMaterials,
-    },
-    {
-      key: 'review',
-      tab: 'cards',
-      label: t('workspace.steps.review'),
-      done: hasMaterials && analysisReady,
-    },
-    {
-      key: 'export',
-      tab: 'report',
-      label: t('workspace.steps.export'),
-      done: analysisReady,
-    },
-  ];
+  // Per-tab completion, shown as check marks on the 5-step tab bar.
+  const stepDone = {
+    upload: files.length > 0 || cards.length > 0,
+    cards: cards.length > 0,
+    timeline: timeline.length > 0,
+    risk: analysisReady,
+    report: analysisReady,
+  };
 
   const handleNextStep = () => {
     if (nextStep === 'upload') {
@@ -1169,10 +1391,19 @@ export function StudyTraceWorkspace({
     const detectorCaveatLine = settings.includeDetectorCaveat
       ? `${t('reportDoc.detectorCaveat')}\n\n`
       : '';
+    const dimensionLines = (analysis.riskDimensions || [])
+      .map(
+        (dimension) =>
+          `- ${t(`workspace.risk.dimensions.${dimension.key}.title`)} [${t(
+            `workspace.risk.levels.${dimension.level}`
+          )}]: ${dimension.finding}${dimension.suggestion ? ` ${dimension.suggestion}` : ''}`
+      )
+      .join('\n');
     const riskSection = showInternalRisks
       ? `
 ## ${t('reportDoc.riskHeading')}
 
+${dimensionLines ? `${dimensionLines}\n` : ''}
 ${analysis.riskItems.map((item) => `- ${item}`).join('\n')}
 
 ## ${t('reportDoc.gapsHeading')}
@@ -1195,19 +1426,21 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
 
 - ${t('reportDoc.assignment')}: ${assignmentTitle || notFilled}
 - ${t('reportDoc.course')}: ${courseName || notFilled}
+- ${t('reportDoc.school')}: ${school || notFilled}
+- ${t('reportDoc.studentId')}: ${studentId || notFilled}
 - ${t('reportDoc.submissionTime')}: ${submittedAt ? formatDateLabel(submittedAt) : notFilled}
 - ${t('reportDoc.concern')}: ${concern || notFilled}
 - ${t('reportDoc.policy')}: ${institutionPolicy || notFilled}
 
 ## ${t('reportDoc.processHeading')}
 
-${processConclusion}
+${analysis.processConclusion || processConclusion}
 
 ${analysis.timelineFindings.map((item) => `- ${item}`).join('\n')}
 
 ## ${t('reportDoc.summaryHeading')}
 
-${reportVariant === 'school-submission' ? processConclusion : t('reportDoc.trustScore', { score: analysis.trustScore })}
+${reportVariant === 'school-submission' ? analysis.processConclusion || processConclusion : t('reportDoc.trustScore', { score: analysis.trustScore })}
 
 ${analysis.summary}
 
@@ -1260,9 +1493,11 @@ ${detectorCaveatLine}${t('reportDoc.disclaimer')}
     institutionPolicy,
     processConclusion,
     reportVariant,
+    school,
     settings.aiPolicy,
     settings.includeDetectorCaveat,
     sortedTimeline,
+    studentId,
     submittedAt,
     t,
   ]);
@@ -1385,13 +1620,22 @@ ${detectorCaveatLine}${t('reportDoc.disclaimer')}
   const exportPdf = async () => {
     setIsExportingPdf(true);
     setStatusMessage(t('workspace.report.status.pdfGenerating'));
+    const fileName = `studytrace-report-${Date.now()}.pdf`;
     try {
-      await exportReportPdf(report, `studytrace-report-${Date.now()}.pdf`);
+      await exportReportPdf(report, fileName);
       setStatusMessage(t('workspace.report.status.pdfDone'));
       void saveReportToCloud();
     } catch (error) {
       console.warn('StudyTrace export pdf failed:', error);
-      setStatusMessage(t('workspace.report.status.pdfFailed'));
+      const fallbackOpened = openReportPdfPrintFallback(
+        report,
+        assignmentTitle || t('workspace.report.unnamedReport')
+      );
+      setStatusMessage(
+        fallbackOpened
+          ? t('workspace.report.status.pdfFallback')
+          : t('workspace.report.status.pdfFailed')
+      );
     } finally {
       setIsExportingPdf(false);
     }
@@ -1404,15 +1648,88 @@ ${detectorCaveatLine}${t('reportDoc.disclaimer')}
         ? t('workspace.syncSaved')
         : t('workspace.localDraft');
 
+  // One-click sample project so first-time users instantly see what the
+  // product produces; cleared with the normal reset action.
+  const loadDemoData = () => {
+    const demo = t.raw('workspace.demo') as {
+      assignment: string;
+      course: string;
+      concern: string;
+      aiBoundary: string;
+      source: string;
+      cards: {
+        title: string;
+        kind: string;
+        summary: string;
+        locator: string;
+        status: string;
+      }[];
+      timeline: {
+        label: string;
+        detail: string;
+        phase: string;
+        daysAgo: number;
+      }[];
+    };
+
+    setAssignmentTitle(demo.assignment);
+    setCourseName(demo.course);
+    setConcern(demo.concern);
+    setAiBoundary(demo.aiBoundary);
+
+    const demoCards = demo.cards.map((item) => {
+      const kind = getEvidenceKind(item.kind) || 'appeal';
+      return enrichEvidenceCard(
+        {
+          id: newId(),
+          title: item.title,
+          kind,
+          source: demo.source,
+          summary: item.summary,
+          notes: '',
+          strength: strengthFromKind(kind),
+          paperLocator: item.locator,
+          submitStatus: getSubmitStatus(item.status),
+          tags: [],
+          riskFlags: [],
+        },
+        t
+      );
+    });
+
+    setCards(demoCards);
+    setActiveCardId(demoCards[0]?.id || '');
+
+    const now = Date.now();
+    setTimeline(
+      demo.timeline.map((item) => ({
+        id: newId(),
+        date: toDateTimeInput(new Date(now - item.daysAgo * 86_400_000)),
+        label: item.label,
+        detail: item.detail || '',
+        source: demo.source,
+        strength: 'medium' as const,
+        phase: getTimelinePhase(item.phase) || 'draft',
+        cardIds: [],
+      }))
+    );
+
+    setActiveTab('cards');
+    setStatusMessage(t('workspace.demo.loaded'));
+  };
+
   const resetWorkspace = () => {
     setAssignmentTitle('');
     setCourseName('');
+    setSchool('');
+    setStudentId('');
     setSubmittedAt('');
     setInstitutionPolicy('');
     setConcern('');
     setAiBoundary(t('aiBoundaryDefaultInput'));
     setFiles([]);
     setCards([]);
+    setActiveCardId('');
     setTimeline([]);
     setSettings(defaultSettings);
     setAnalysis(getInitialAnalysis(t));
@@ -1556,119 +1873,122 @@ ${detectorCaveatLine}${t('reportDoc.disclaimer')}
       <section className="container grid gap-4 py-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-4">
           <Card className="rounded-lg">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ClipboardCheck className="size-5" />
-                {t('workspace.basic.title')}
-              </CardTitle>
-              <CardDescription>{t('workspace.basic.desc')}</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-2">
-              <Field label={t('workspace.basic.assignment')}>
-                <Input
-                  value={assignmentTitle}
-                  onChange={(event) => setAssignmentTitle(event.target.value)}
-                  placeholder={t('workspace.basic.assignmentPlaceholder')}
-                />
-              </Field>
-              <Field label={t('workspace.basic.course')}>
-                <Input
-                  value={courseName}
-                  onChange={(event) => setCourseName(event.target.value)}
-                  placeholder={t('workspace.basic.coursePlaceholder')}
-                />
-              </Field>
-              <Field label={t('workspace.basic.submittedAt')}>
-                <Input
-                  type="datetime-local"
-                  value={submittedAt}
-                  onChange={(event) => setSubmittedAt(event.target.value)}
-                />
-              </Field>
-              <Field label={t('workspace.basic.concern')}>
-                <Textarea
-                  value={concern}
-                  onChange={(event) => setConcern(event.target.value)}
-                  placeholder={t('workspace.basic.concernPlaceholder')}
-                  className="min-h-24"
-                />
-              </Field>
-              <Field label={t('workspace.basic.policy')}>
-                <Textarea
-                  value={institutionPolicy}
-                  onChange={(event) => setInstitutionPolicy(event.target.value)}
-                  placeholder={t('workspace.basic.policyPlaceholder')}
-                  className="min-h-24"
-                />
-              </Field>
-              <Field
-                label={t('workspace.basic.aiBoundary')}
-                className="md:col-span-2"
-              >
-                <Textarea
-                  value={aiBoundary}
-                  onChange={(event) => setAiBoundary(event.target.value)}
-                  className="min-h-28"
-                />
-              </Field>
-            </CardContent>
-          </Card>
-
-          <div className="studytrace-no-print grid gap-2 md:grid-cols-3">
-            {guidedSteps.map((step, index) => {
-              const isCurrent =
-                (nextStep === 'upload' && step.key === 'upload') ||
-                (nextStep === 'analyze' && step.key === 'review') ||
-                (nextStep === 'export' && step.key === 'export');
-              return (
-                <button
-                  key={step.key}
-                  type="button"
-                  onClick={() => setActiveTab(step.tab)}
+            <CardHeader
+              className="cursor-pointer select-none"
+              onClick={() => setBasicOpen(!isBasicOpen)}
+            >
+              <CardTitle className="flex items-center justify-between gap-2">
+                <span className="flex items-center gap-2">
+                  <ClipboardCheck className="size-5" />
+                  {t('workspace.basic.title')}
+                </span>
+                <ChevronDown
                   className={cn(
-                    'flex items-center gap-3 rounded-lg border p-3 text-left transition',
-                    isCurrent
-                      ? 'border-primary bg-primary/5 shadow-sm'
-                      : 'bg-background hover:bg-muted/40'
+                    'text-muted-foreground size-4 transition-transform',
+                    isBasicOpen && 'rotate-180'
                   )}
+                />
+              </CardTitle>
+              <CardDescription>
+                {isBasicOpen
+                  ? t('workspace.basic.desc')
+                  : t('workspace.basic.collapsedHint')}
+              </CardDescription>
+            </CardHeader>
+            {isBasicOpen ? (
+              <CardContent className="grid gap-4 md:grid-cols-2">
+                <Field label={t('workspace.basic.assignment')}>
+                  <Input
+                    value={assignmentTitle}
+                    onChange={(event) => setAssignmentTitle(event.target.value)}
+                    placeholder={t('workspace.basic.assignmentPlaceholder')}
+                  />
+                </Field>
+                <Field label={t('workspace.basic.course')}>
+                  <Input
+                    value={courseName}
+                    onChange={(event) => setCourseName(event.target.value)}
+                    placeholder={t('workspace.basic.coursePlaceholder')}
+                  />
+                </Field>
+                <Field label={t('workspace.basic.school')}>
+                  <Input
+                    value={school}
+                    onChange={(event) => setSchool(event.target.value)}
+                    placeholder={t('workspace.basic.schoolPlaceholder')}
+                  />
+                </Field>
+                <Field label={t('workspace.basic.studentId')}>
+                  <Input
+                    value={studentId}
+                    onChange={(event) => setStudentId(event.target.value)}
+                    placeholder={t('workspace.basic.studentIdPlaceholder')}
+                  />
+                </Field>
+                <Field label={t('workspace.basic.submittedAt')}>
+                  <Input
+                    type="datetime-local"
+                    value={submittedAt}
+                    onChange={(event) => setSubmittedAt(event.target.value)}
+                  />
+                </Field>
+                <Field label={t('workspace.basic.concern')}>
+                  <Textarea
+                    value={concern}
+                    onChange={(event) => setConcern(event.target.value)}
+                    placeholder={t('workspace.basic.concernPlaceholder')}
+                    className="min-h-24"
+                  />
+                </Field>
+                <Field label={t('workspace.basic.policy')}>
+                  <Textarea
+                    value={institutionPolicy}
+                    onChange={(event) =>
+                      setInstitutionPolicy(event.target.value)
+                    }
+                    placeholder={t('workspace.basic.policyPlaceholder')}
+                    className="min-h-24"
+                  />
+                </Field>
+                <Field
+                  label={t('workspace.basic.aiBoundary')}
+                  className="md:col-span-2"
                 >
-                  <span
-                    className={cn(
-                      'flex size-7 shrink-0 items-center justify-center rounded-full text-sm font-semibold',
-                      step.done
-                        ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400'
-                        : isCurrent
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted text-muted-foreground'
-                    )}
-                  >
-                    {step.done ? (
-                      <CheckCircle2 className="size-4" />
-                    ) : (
-                      index + 1
-                    )}
-                  </span>
-                  <span className="text-sm font-medium">{step.label}</span>
-                </button>
-              );
-            })}
-          </div>
+                  <Textarea
+                    value={aiBoundary}
+                    onChange={(event) => setAiBoundary(event.target.value)}
+                    className="min-h-28"
+                  />
+                </Field>
+              </CardContent>
+            ) : null}
+          </Card>
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="studytrace-no-print grid h-auto w-full grid-cols-2 gap-1 md:grid-cols-5">
-              <TabsTrigger value="upload">
-                {t('workspace.tabs.upload')}
-              </TabsTrigger>
-              <TabsTrigger value="cards">
-                {t('workspace.tabs.cards')}
-              </TabsTrigger>
-              <TabsTrigger value="timeline">
-                {t('workspace.tabs.timeline')}
-              </TabsTrigger>
-              <TabsTrigger value="risk">{t('workspace.tabs.risk')}</TabsTrigger>
-              <TabsTrigger value="report">
-                {t('workspace.tabs.report')}
-              </TabsTrigger>
+              {(
+                [
+                  ['upload', stepDone.upload],
+                  ['cards', stepDone.cards],
+                  ['timeline', stepDone.timeline],
+                  ['risk', stepDone.risk],
+                  ['report', stepDone.report],
+                ] as [string, boolean][]
+              ).map(([tab, done], index) => (
+                <TabsTrigger key={tab} value={tab} className="gap-1.5">
+                  <span
+                    className={cn(
+                      'flex size-5 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
+                      done
+                        ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400'
+                        : 'bg-muted text-muted-foreground'
+                    )}
+                  >
+                    {done ? <CheckCircle2 className="size-3.5" /> : index + 1}
+                  </span>
+                  {t(`workspace.tabs.${tab}`)}
+                </TabsTrigger>
+              ))}
             </TabsList>
 
             <TabsContent value="upload" className="mt-4 space-y-4">
@@ -1697,7 +2017,22 @@ ${detectorCaveatLine}${t('reportDoc.disclaimer')}
                   </div>
                   <label
                     htmlFor="studytrace-files"
-                    className="bg-background hover:bg-muted/35 group flex min-h-[240px] cursor-pointer flex-col items-center justify-center gap-4 rounded-lg border border-dashed px-4 text-center shadow-sm transition"
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      setIsDragOver(true);
+                    }}
+                    onDragLeave={() => setIsDragOver(false)}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      setIsDragOver(false);
+                      if (event.dataTransfer.files?.length) {
+                        void handleFiles(event.dataTransfer.files);
+                      }
+                    }}
+                    className={cn(
+                      'bg-background hover:bg-muted/35 group flex min-h-[240px] cursor-pointer flex-col items-center justify-center gap-4 rounded-lg border border-dashed px-4 text-center shadow-sm transition',
+                      isDragOver && 'border-primary bg-primary/5'
+                    )}
                   >
                     <div className="bg-primary/10 text-primary rounded-md border p-3 shadow-sm transition-transform group-hover:scale-105">
                       <Files className="text-primary size-8" />
@@ -1726,6 +2061,22 @@ ${detectorCaveatLine}${t('reportDoc.disclaimer')}
                       }}
                     />
                   </label>
+
+                  {!files.length && !cards.length && !timeline.length ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <span className="text-muted-foreground text-sm">
+                        {t('workspace.demo.prompt')}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={loadDemoData}
+                      >
+                        <Sparkles className="size-4" />
+                        {t('workspace.demo.button')}
+                      </Button>
+                    </div>
+                  ) : null}
 
                   <div className="grid gap-3 md:grid-cols-2">
                     {files.length ? (
@@ -1803,9 +2154,26 @@ ${detectorCaveatLine}${t('reportDoc.disclaimer')}
             <TabsContent value="cards" className="mt-4 space-y-4">
               <Card className="rounded-lg">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <FileText className="size-5" />
-                    {t('workspace.cards.title')}
+                  <CardTitle className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="flex items-center gap-2">
+                      <FileText className="size-5" />
+                      {t('workspace.cards.title')}
+                    </span>
+                    {files.length ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={isRegenerating}
+                        onClick={() => void regenerateCards()}
+                      >
+                        {isRegenerating ? (
+                          <RefreshCw className="size-4 animate-spin" />
+                        ) : (
+                          <Sparkles className="size-4" />
+                        )}
+                        {t('workspace.cards.regenButton')}
+                      </Button>
+                    ) : null}
                   </CardTitle>
                   <CardDescription>{t('workspace.cards.desc')}</CardDescription>
                 </CardHeader>
@@ -1910,19 +2278,78 @@ ${detectorCaveatLine}${t('reportDoc.disclaimer')}
                   </div>
 
                   <div className="space-y-3">
-                    {cards.length ? (
-                      cards.map((card) => (
+                    {activeCard ? (
+                      <>
+                        <div className="bg-muted/20 flex flex-col gap-3 rounded-lg border p-3 md:flex-row md:items-center md:justify-between">
+                          <div>
+                            <div className="text-sm font-medium">
+                              {t('workspace.cards.position', {
+                                current: currentCardIndex + 1,
+                                total: cards.length,
+                              })}
+                            </div>
+                            <p className="text-muted-foreground mt-1 text-sm">
+                              {t('workspace.cards.singleCardHint')}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              variant="outline"
+                              disabled={currentCardIndex <= 0}
+                              onClick={() =>
+                                setActiveCardId(cards[currentCardIndex - 1].id)
+                              }
+                            >
+                              <ChevronLeft className="size-4" />
+                              {t('workspace.cards.previous')}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              disabled={currentCardIndex >= cards.length - 1}
+                              onClick={() =>
+                                setActiveCardId(cards[currentCardIndex + 1].id)
+                              }
+                            >
+                              {t('workspace.cards.next')}
+                              <ChevronRight className="size-4" />
+                            </Button>
+                          </div>
+                        </div>
+
                         <div
-                          key={card.id}
-                          id={`evidence-card-${card.id}`}
+                          className="studytrace-no-print flex gap-1 overflow-x-auto py-1"
+                          aria-label={t('workspace.cards.quickSelect')}
+                        >
+                          {cards.map((card, index) => (
+                            <button
+                              key={card.id}
+                              type="button"
+                              aria-label={t('workspace.cards.selectCard', {
+                                index: index + 1,
+                              })}
+                              onClick={() => setActiveCardId(card.id)}
+                              className={cn(
+                                'min-h-10 min-w-10 rounded-md border px-3 text-sm font-medium transition',
+                                card.id === activeCard.id
+                                  ? 'border-primary bg-primary text-primary-foreground'
+                                  : 'bg-background hover:bg-muted'
+                              )}
+                            >
+                              {index + 1}
+                            </button>
+                          ))}
+                        </div>
+
+                        <div
+                          id={`evidence-card-${activeCard.id}`}
                           className={cn(
                             'bg-background rounded-lg border-l-4 p-4 shadow-sm transition-shadow',
-                            card.submitStatus === 'ready'
+                            activeCard.submitStatus === 'ready'
                               ? 'border-l-green-600'
-                              : card.submitStatus === 'do-not-submit'
+                              : activeCard.submitStatus === 'do-not-submit'
                                 ? 'border-l-red-500'
                                 : 'border-l-amber-500',
-                            highlightedCardId === card.id &&
+                            highlightedCardId === activeCard.id &&
                               'ring-primary ring-2'
                           )}
                         >
@@ -1930,65 +2357,85 @@ ${detectorCaveatLine}${t('reportDoc.disclaimer')}
                             <div className="min-w-0 space-y-2">
                               <div className="flex flex-wrap items-center gap-2">
                                 <Badge variant="outline">
-                                  {t(`evidenceKinds.${card.kind}`)}
+                                  {t(`evidenceKinds.${activeCard.kind}`)}
                                 </Badge>
-                                <StrengthBadge strength={card.strength} />
-                                <SubmitBadge status={card.submitStatus} />
-                                <span className="font-medium break-words">
-                                  {card.title}
-                                </span>
+                                <StrengthBadge strength={activeCard.strength} />
+                                <SubmitBadge status={activeCard.submitStatus} />
                               </div>
+                              <h3 className="text-lg font-semibold break-words">
+                                {activeCard.title}
+                              </h3>
                               <p className="text-muted-foreground text-sm">
                                 {t('workspace.cards.sourceLabel', {
-                                  source: card.source,
+                                  source: activeCard.source,
                                 })}
                               </p>
-                              <div className="grid gap-2 text-sm md:grid-cols-2">
-                                <div className="bg-muted/20 rounded-md border p-3">
-                                  <div className="text-muted-foreground text-xs">
-                                    {t('workspace.cards.proofTarget')}
-                                  </div>
-                                  <div className="mt-1 font-medium">
-                                    {card.proofTarget ||
-                                      t('workspace.cards.notSpecified')}
-                                  </div>
-                                </div>
-                                <div className="bg-muted/20 rounded-md border p-3">
-                                  <div className="text-muted-foreground text-xs">
-                                    {t('workspace.cards.paperLocator')}
-                                  </div>
-                                  <div className="mt-1 font-medium">
-                                    {card.paperLocator ||
-                                      t('workspace.cards.notSpecified')}
-                                  </div>
-                                </div>
-                              </div>
                             </div>
                             <Button
                               variant="ghost"
                               size="icon"
                               aria-label={t('workspace.cards.deleteAria')}
-                              onClick={() => deleteCard(card.id)}
+                              onClick={() => deleteCard(activeCard.id)}
                             >
                               <Trash2 className="size-4" />
                             </Button>
                           </div>
+
+                          <div className="mt-4 grid gap-2 text-sm md:grid-cols-3">
+                            <div className="bg-muted/20 rounded-md border p-3">
+                              <div className="text-muted-foreground text-xs">
+                                {t('workspace.cards.proofTarget')}
+                              </div>
+                              <div className="mt-1 font-medium">
+                                {activeCard.proofTarget ||
+                                  t('workspace.cards.notSpecified')}
+                              </div>
+                            </div>
+                            <div className="bg-muted/20 rounded-md border p-3">
+                              <div className="text-muted-foreground text-xs">
+                                {t('workspace.cards.paperLocator')}
+                              </div>
+                              <div className="mt-1 font-medium">
+                                {activeCard.paperLocator ||
+                                  t('workspace.cards.notSpecified')}
+                              </div>
+                            </div>
+                            <div className="bg-muted/20 rounded-md border p-3">
+                              <div className="text-muted-foreground text-xs">
+                                {t('workspace.cards.submitStatus')}
+                              </div>
+                              <div className="mt-1">
+                                <SubmitBadge status={activeCard.submitStatus} />
+                              </div>
+                            </div>
+                          </div>
+
                           <div className="mt-4 grid gap-3 md:grid-cols-2">
                             <Field label={t('workspace.cards.formSummary')}>
                               <Textarea
-                                value={card.summary}
+                                value={activeCard.summary}
                                 onChange={(event) =>
-                                  updateCard(card.id, {
+                                  updateCard(activeCard.id, {
                                     summary: event.target.value,
+                                  })
+                                }
+                              />
+                            </Field>
+                            <Field label={t('workspace.cards.formNotes')}>
+                              <Textarea
+                                value={activeCard.notes}
+                                onChange={(event) =>
+                                  updateCard(activeCard.id, {
+                                    notes: event.target.value,
                                   })
                                 }
                               />
                             </Field>
                             <Field label={t('workspace.cards.proofTarget')}>
                               <Input
-                                value={card.proofTarget || ''}
+                                value={activeCard.proofTarget || ''}
                                 onChange={(event) =>
-                                  updateCard(card.id, {
+                                  updateCard(activeCard.id, {
                                     proofTarget: event.target.value,
                                   })
                                 }
@@ -1996,9 +2443,9 @@ ${detectorCaveatLine}${t('reportDoc.disclaimer')}
                             </Field>
                             <Field label={t('workspace.cards.paperLocator')}>
                               <Input
-                                value={card.paperLocator || ''}
+                                value={activeCard.paperLocator || ''}
                                 onChange={(event) =>
-                                  updateCard(card.id, {
+                                  updateCard(activeCard.id, {
                                     paperLocator: event.target.value,
                                   })
                                 }
@@ -2006,14 +2453,14 @@ ${detectorCaveatLine}${t('reportDoc.disclaimer')}
                             </Field>
                             <Field label={t('workspace.cards.submitStatus')}>
                               <select
-                                value={card.submitStatus || 'needs-more'}
+                                value={activeCard.submitStatus || 'needs-more'}
                                 onChange={(event) =>
-                                  updateCard(card.id, {
+                                  updateCard(activeCard.id, {
                                     submitStatus: event.target
                                       .value as SubmitStatus,
                                   })
                                 }
-                                className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+                                className="border-input bg-background h-10 rounded-md border px-3 text-sm"
                               >
                                 {(
                                   [
@@ -2030,37 +2477,28 @@ ${detectorCaveatLine}${t('reportDoc.disclaimer')}
                             </Field>
                             <Field label={t('workspace.cards.formSource')}>
                               <Input
-                                id={`card-source-${card.id}`}
-                                value={card.source}
+                                id={`card-source-${activeCard.id}`}
+                                value={activeCard.source}
                                 placeholder={t(
                                   'workspace.cards.formSourcePlaceholder'
                                 )}
                                 onChange={(event) =>
-                                  updateCard(card.id, {
+                                  updateCard(activeCard.id, {
                                     source: event.target.value,
                                   })
                                 }
                               />
                             </Field>
-                            <Field label={t('workspace.cards.formNotes')}>
-                              <Textarea
-                                value={card.notes}
-                                onChange={(event) =>
-                                  updateCard(card.id, {
-                                    notes: event.target.value,
-                                  })
-                                }
-                              />
-                            </Field>
                           </div>
+
                           <div className="mt-4 grid gap-3 md:grid-cols-2">
                             <div className="rounded-md border p-3">
                               <div className="mb-2 text-sm font-medium">
                                 {t('workspace.cards.riskFlags')}
                               </div>
                               <ul className="text-muted-foreground space-y-1 text-sm">
-                                {(card.riskFlags?.length
-                                  ? card.riskFlags
+                                {(activeCard.riskFlags?.length
+                                  ? activeCard.riskFlags
                                   : [t('workspace.cards.noRiskFlags')]
                                 ).map((item) => (
                                   <li key={item}>- {item}</li>
@@ -2075,25 +2513,25 @@ ${detectorCaveatLine}${t('reportDoc.disclaimer')}
                                 <Button
                                   size="sm"
                                   variant={
-                                    card.submitStatus === 'ready'
+                                    activeCard.submitStatus === 'ready'
                                       ? 'outline'
                                       : 'secondary'
                                   }
-                                  onClick={() => toggleCardInReport(card)}
+                                  onClick={() => toggleCardInReport(activeCard)}
                                 >
-                                  {card.submitStatus === 'ready' ? (
+                                  {activeCard.submitStatus === 'ready' ? (
                                     <EyeOff className="size-3.5" />
                                   ) : (
                                     <ClipboardCheck className="size-3.5" />
                                   )}
-                                  {card.submitStatus === 'ready'
+                                  {activeCard.submitStatus === 'ready'
                                     ? t('workspace.cards.actionExclude')
                                     : t('workspace.cards.actionInclude')}
                                 </Button>
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => focusCardSource(card.id)}
+                                  onClick={() => focusCardSource(activeCard.id)}
                                 >
                                   <Link2 className="size-3.5" />
                                   {t('workspace.cards.actionSource')}
@@ -2101,7 +2539,9 @@ ${detectorCaveatLine}${t('reportDoc.disclaimer')}
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => generateCardExplanation(card)}
+                                  onClick={() =>
+                                    generateCardExplanation(activeCard)
+                                  }
                                 >
                                   <Sparkles className="size-3.5" />
                                   {t('workspace.cards.actionExplain')}
@@ -2109,7 +2549,9 @@ ${detectorCaveatLine}${t('reportDoc.disclaimer')}
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => redactCardSensitiveInfo(card)}
+                                  onClick={() =>
+                                    redactCardSensitiveInfo(activeCard)
+                                  }
                                 >
                                   <EyeOff className="size-3.5" />
                                   {t('workspace.cards.actionRedact')}
@@ -2118,7 +2560,7 @@ ${detectorCaveatLine}${t('reportDoc.disclaimer')}
                             </div>
                           </div>
                         </div>
-                      ))
+                      </>
                     ) : (
                       <EmptyLine text={t('workspace.cards.empty')} />
                     )}
@@ -2147,7 +2589,7 @@ ${detectorCaveatLine}${t('reportDoc.disclaimer')}
                           {t('workspace.timeline.processConclusionTitle')}
                         </div>
                         <p className="text-muted-foreground mt-1 text-sm leading-6">
-                          {processConclusion}
+                          {analysis.processConclusion || processConclusion}
                         </p>
                       </div>
                     </div>
@@ -2279,36 +2721,82 @@ ${detectorCaveatLine}${t('reportDoc.disclaimer')}
                   <CardDescription>{t('workspace.risk.desc')}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <ScorePanel score={analysis.trustScore} />
-                    <div className="bg-background rounded-lg border p-4 md:col-span-2">
-                      <div className="mb-2 flex items-center gap-2 font-medium">
-                        <Sparkles className="text-primary size-4" />
-                        {t('workspace.risk.summary')}
-                      </div>
-                      <p className="text-muted-foreground text-sm leading-6">
-                        {analysis.summary || localAnalysis.summary}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-3 md:grid-cols-5">
-                    {(
-                      t.raw('workspace.risk.dimensions') as {
-                        title: string;
-                        desc: string;
-                      }[]
-                    ).map((item) => (
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    {processMetrics.map((metric) => (
                       <div
-                        key={item.title}
-                        className="bg-background rounded-lg border p-3"
+                        key={metric.key}
+                        className="bg-background rounded-lg border p-4"
                       >
-                        <div className="text-sm font-medium">{item.title}</div>
-                        <p className="text-muted-foreground mt-2 text-xs leading-5">
-                          {item.desc}
+                        <div className="text-muted-foreground text-xs">
+                          {metric.label}
+                        </div>
+                        <div
+                          className={cn(
+                            'mt-1 text-2xl font-semibold',
+                            metric.tone
+                          )}
+                        >
+                          {metric.value}
+                        </div>
+                        <p className="text-muted-foreground mt-1 text-xs leading-5">
+                          {metric.hint}
                         </p>
                       </div>
                     ))}
+                  </div>
+
+                  <div className="bg-background rounded-lg border p-4">
+                    <div className="mb-2 flex items-center gap-2 font-medium">
+                      <Sparkles className="text-primary size-4" />
+                      {t('workspace.risk.summary')}
+                    </div>
+                    <p className="text-muted-foreground text-sm leading-6">
+                      {analysis.summary || localAnalysis.summary}
+                    </p>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-5">
+                    {riskDimensionKeys.map((key) => {
+                      const dimension = analysis.riskDimensions?.find(
+                        (item) => item.key === key
+                      );
+                      return (
+                        <div
+                          key={key}
+                          className="bg-background rounded-lg border p-3"
+                        >
+                          <div className="flex items-start justify-between gap-1">
+                            <div className="text-sm font-medium">
+                              {t(`workspace.risk.dimensions.${key}.title`)}
+                            </div>
+                            {dimension ? (
+                              <span
+                                className={cn(
+                                  'shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium',
+                                  dimension.level === 'low' &&
+                                    'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400',
+                                  dimension.level === 'medium' &&
+                                    'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400',
+                                  dimension.level === 'high' &&
+                                    'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400'
+                                )}
+                              >
+                                {t(`workspace.risk.levels.${dimension.level}`)}
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="text-muted-foreground mt-2 text-xs leading-5">
+                            {dimension?.finding ||
+                              t(`workspace.risk.dimensions.${key}.desc`)}
+                          </p>
+                          {dimension?.suggestion ? (
+                            <p className="text-primary mt-1.5 text-xs leading-5">
+                              {dimension.suggestion}
+                            </p>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                   </div>
 
                   <InsightList
@@ -2656,28 +3144,6 @@ function SubmitBadge({ status }: { status?: SubmitStatus }) {
     >
       {t(`submitStatus.${value}`)}
     </Badge>
-  );
-}
-
-function ScorePanel({ score }: { score: number }) {
-  const t = useTranslations('studytrace');
-  const tone =
-    score >= 75
-      ? 'text-green-600'
-      : score >= 50
-        ? 'text-amber-600'
-        : 'text-red-600';
-  return (
-    <div className="bg-background rounded-lg border p-4">
-      <div className="mb-2 flex items-center gap-2 font-medium">
-        <ShieldCheck className="text-primary size-4" />
-        {t('scorePanel.title')}
-      </div>
-      <div className={cn('text-4xl font-semibold', tone)}>{score}</div>
-      <div className="text-muted-foreground mt-2 text-sm">
-        {t('scorePanel.outOf')}
-      </div>
-    </div>
   );
 }
 

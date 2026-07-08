@@ -116,13 +116,132 @@
     },
     "localCacheReduced": "Local browser draft space is low; only basic information and the file list were saved.",
     "localCachePaused": "Local browser draft space is low; local autosave has been paused.",
+    "metrics": {
+      "citation": "Verifiable citations",
+      "citationHint": "Submittable citation evidence / all citation evidence",
+      "phases": "Process phases covered",
+      "phasesHint": "Academic-process phases covered by the timeline (of 9)",
+      "ai": "AI use explained",
+      "aiHint": "AI-use records with a clear purpose / all AI-use records",
+      "coverage": "Appeal-material completeness",
+      "coverageHint": "Coverage across the six evidence categories"
+    },
+    "demo": {
+      "prompt": "No materials yet?",
+      "button": "See a sample project",
+      "loaded": "Sample project loaded. Review the evidence cards and timeline, then click \"Generate analysis\".",
+      "assignment": "Course essay: The Impact of Social Media on Adolescent Attention",
+      "course": "PSYC 201 Cognitive Psychology",
+      "concern": "Turnitin flagged 34% AI likelihood; the instructor asked for an explanation of the writing process and AI-use scope.",
+      "aiBoundary": "Grammarly was used for grammar checks only, and ChatGPT to clarify two statistical concepts; all body text was written by me.",
+      "source": "Sample data",
+      "cards": [
+        {
+          "title": "final_essay_v3.docx (final draft)",
+          "kind": "paper",
+          "summary": "Final submission, about 2,400 words with 18 citations.",
+          "locator": "Whole paper",
+          "status": "ready"
+        },
+        {
+          "title": "Google Docs version history (3 drafts)",
+          "kind": "writing-process",
+          "summary": "3 major versions over 7 days, growing from 800 to 2,400 words — evidence of incremental writing.",
+          "locator": "Whole paper",
+          "status": "ready"
+        },
+        {
+          "title": "Zotero library export (18 entries)",
+          "kind": "citation",
+          "summary": "16 of 18 sources have DOIs; 2 book chapters still need page numbers.",
+          "locator": "References",
+          "status": "needs-more"
+        },
+        {
+          "title": "ChatGPT conversation screenshots",
+          "kind": "ai-use",
+          "summary": "Two conversations: explaining regression to the mean, and confirming APA citation format. No body text was generated.",
+          "locator": "Paragraphs 3 and 7",
+          "status": "ready"
+        },
+        {
+          "title": "Assignment brief + course AI policy",
+          "kind": "school",
+          "summary": "The brief allows grammar tools but requires disclosing AI use.",
+          "locator": "Whole paper",
+          "status": "ready"
+        },
+        {
+          "title": "Appeal statement draft",
+          "kind": "appeal",
+          "summary": "Writing-process explanation organized by timeline; supervisor feedback email still to be added.",
+          "locator": "Whole paper",
+          "status": "needs-more"
+        }
+      ],
+      "timeline": [
+        {
+          "label": "Received the assignment and confirmed the topic",
+          "detail": "Uploaded the assignment brief and course AI policy.",
+          "phase": "topic",
+          "daysAgo": 21
+        },
+        {
+          "label": "Literature search: imported 18 sources",
+          "detail": "Zotero library created with DOIs and abstracts.",
+          "phase": "research",
+          "daysAgo": 18
+        },
+        {
+          "label": "Finished reading notes and excerpts",
+          "detail": "Reading excerpts from 6 core sources.",
+          "phase": "reading",
+          "daysAgo": 14
+        },
+        {
+          "label": "Completed the first draft (about 800 words)",
+          "detail": "First major Google Docs version.",
+          "phase": "draft",
+          "daysAgo": 10
+        },
+        {
+          "label": "Used ChatGPT to clarify statistical concepts",
+          "detail": "Two conversations; no generated text was pasted into the essay.",
+          "phase": "ai-assist",
+          "daysAgo": 8
+        },
+        {
+          "label": "Second draft: expanded to 1,900 words",
+          "detail": "Restructured and added two argument sections.",
+          "phase": "revision",
+          "daysAgo": 6
+        },
+        {
+          "label": "Verified citations one by one; 2 need page numbers",
+          "detail": "16 of 18 citations confirmed with DOIs.",
+          "phase": "citation-check",
+          "daysAgo": 3
+        },
+        {
+          "label": "Submitted the final draft",
+          "detail": "final_essay_v3.docx submitted to the course system.",
+          "phase": "submission",
+          "daysAgo": 1
+        }
+      ]
+    },
     "basic": {
       "title": "Basic information",
       "desc": "These fields go into the final report to explain the appeal context and policy boundaries.",
+      "collapsedHint": "Needed for the report export; you can fill it in later. Click to expand.",
       "assignment": "Assignment title",
       "assignmentPlaceholder": "e.g. Research Essay Final Draft",
       "course": "Course name",
       "coursePlaceholder": "e.g. Academic Writing 101",
+      "school": "School",
+      "schoolPlaceholder": "e.g. University of Sydney",
+      "studentId": "Student ID",
+      "studentIdPlaceholder": "e.g. 520123456",
       "submittedAt": "Submission time",
       "concern": "Concern raised",
       "concernPlaceholder": "e.g. AI detection flagged high risk, but I have complete drafts and a citation process.",
@@ -169,6 +288,7 @@
         "generated": "Generated {count} evidence cards and timeline nodes.",
         "ingesting": "Generating evidence cards and timeline with AI...",
         "aiGenerated": "AI generated {cards} evidence cards and {events} timeline nodes.",
+        "basicAutoFilled": "Auto-detected {count} basic info field(s) (school / student ID / course) from your files; please review them in Basic info.",
         "localGenerated": "Generated {count} local evidence cards and timeline nodes.",
         "reportReady": "Report draft is ready with a local score of {score}/100.",
         "needAuth": "Sign in to use AI ingest; local evidence cards and timeline nodes were generated.",
@@ -182,6 +302,12 @@
     "cards": {
       "title": "Evidence cards",
       "desc": "Each card should answer one question: how it proves a genuine writing process, a credible source, or a clear AI-use boundary.",
+      "singleCardHint": "Work through one evidence card at a time, confirm what it proves, then move to the next card.",
+      "position": "Card {current} of {total}",
+      "previous": "Previous",
+      "next": "Next",
+      "quickSelect": "Quick evidence-card switcher",
+      "selectCard": "View evidence card {index}",
       "sourceUpload": "Uploaded file",
       "sourceManual": "Manual entry",
       "formTitle": "Evidence title",
@@ -214,6 +340,8 @@
       "redactedMask": "[redacted]",
       "redactedNone": "No obvious sensitive info detected (emails or 8+ consecutive digits).",
       "redactedDone": "Redacted {count} sensitive item(s).",
+      "regenButton": "Regenerate cards with AI",
+      "regenEmpty": "The AI did not return new evidence cards; please try again later.",
       "noRiskFlags": "No obvious risk points marked.",
       "notSpecified": "Not specified",
       "add": "Add evidence card",
@@ -261,28 +389,33 @@
       "reanalyze": "Re-analyze",
       "localEval": "Local evaluation",
       "localRefreshed": "Local analysis refreshed.",
-      "dimensions": [
-        {
+      "dimensions": {
+        "citation-authenticity": {
           "title": "Citation authenticity",
           "desc": "Whether citations can be verified through DOI, publisher pages, databases, or excerpts."
         },
-        {
+        "citation-format": {
           "title": "Citation formatting",
           "desc": "Whether authors, years, pages, and style match school requirements."
         },
-        {
+        "ai-use": {
           "title": "AI-use explanation",
           "desc": "Whether tool, date, purpose, and final-text use are clear."
         },
-        {
+        "process-gap": {
           "title": "Writing-process gaps",
           "desc": "Whether topic, research, drafting, revision, and submission evidence is continuous."
         },
-        {
+        "appeal-completeness": {
           "title": "Appeal completeness",
           "desc": "Whether school notice, assignment brief, evidence index, and appendices are complete."
         }
-      ]
+      },
+      "levels": {
+        "low": "Low risk",
+        "medium": "Needs attention",
+        "high": "Needs support"
+      }
     },
     "report": {
       "title": "Report export",
@@ -323,7 +456,8 @@
         "copyFailed": "Copy failed. Please use the export button.",
         "pdfGenerating": "Generating PDF...",
         "pdfDone": "PDF exported.",
-        "pdfFailed": "PDF generation failed. You can print to PDF instead."
+        "pdfFallback": "Automatic PDF generation was blocked. A printable version opened; choose \"Save as PDF\" in the print window.",
+        "pdfFailed": "PDF generation failed. Click \"Print\" and choose \"Save as PDF\"."
       }
     },
     "analysisStatus": {
@@ -434,6 +568,21 @@
         "The AI-use statement should be specific about the tool, date, purpose, and whether it entered the final version.",
         "Remove unrelated personal information before exporting; keep only appeal-relevant evidence."
       ]
+    },
+    "localDims": {
+      "citationAuthenticityOk": "There are {count} citation evidence card(s) available to verify citation authenticity.",
+      "citationAuthenticityMissing": "No citation evidence cards yet; citation authenticity lacks verifiable support.",
+      "citationAuthenticitySuggest": "Add DOIs, publisher pages, or database links for key citations.",
+      "citationFormatUnchecked": "Citation formatting has not been checked item by item; authors, years, or pages may not match school requirements.",
+      "citationFormatSuggest": "Check each citation against the school's style guide and fix inconsistencies.",
+      "aiUseOk": "The AI-use boundary is stated and supported by {count} AI-use record card(s).",
+      "aiUseMissing": "AI-use records or a boundary statement are missing, so AI use is not yet well explained.",
+      "aiUseSuggest": "Add timestamped AI conversation records or screenshots and note the purpose (e.g. grammar polishing).",
+      "processGapFinding": "There are {drafts} writing-process card(s) and {events} dated timeline node(s).",
+      "processGapSuggest": "Add draft versions, version history, or writing records to close process gaps.",
+      "appealCompletenessOk": "School materials and appeal materials are both uploaded; the appeal package basics are complete.",
+      "appealCompletenessMissing": "School or appeal materials are incomplete; key background documents are still missing.",
+      "appealCompletenessSuggest": "Upload the assignment brief, school notice, or appeal-related emails to complete the package."
     }
   },
   "reportDoc": {
@@ -446,6 +595,8 @@
     "basicHeading": "Basic information",
     "assignment": "Assignment",
     "course": "Course",
+    "school": "School",
+    "studentId": "Student ID",
     "submissionTime": "Submission time",
     "concern": "Concern raised",
     "policy": "Course/School policy",

@@ -108,13 +108,132 @@
     },
     "localCacheReduced": "浏览器本地草稿空间不足，已只保存基础信息和文件列表。",
     "localCachePaused": "浏览器本地草稿空间不足，已暂停本地自动保存。",
+    "metrics": {
+      "citation": "引用可核验",
+      "citationHint": "可直接提交的引用证据 / 全部引用证据",
+      "phases": "过程阶段覆盖",
+      "phasesHint": "时间线覆盖的学术过程阶段（共 9 个）",
+      "ai": "AI 使用已解释",
+      "aiHint": "已写清用途的 AI 记录 / 全部 AI 记录",
+      "coverage": "申诉材料完整度",
+      "coverageHint": "六类证据的覆盖比例"
+    },
+    "demo": {
+      "prompt": "还没有材料？",
+      "button": "先看示例效果",
+      "loaded": "已载入示例项目。先看看证据卡和时间线，然后点右侧「生成分析」。",
+      "assignment": "《社交媒体对青少年注意力的影响》课程论文",
+      "course": "PSYC 201 认知心理学",
+      "concern": "Turnitin AI 检测标记 34%，导师要求说明写作过程与 AI 使用范围。",
+      "aiBoundary": "仅使用 Grammarly 做语法检查，并用 ChatGPT 解释过两个统计概念；全部正文由本人撰写。",
+      "source": "示例数据",
+      "cards": [
+        {
+          "title": "final_essay_v3.docx（最终稿）",
+          "kind": "paper",
+          "summary": "最终提交稿，约 2,400 字，含 18 条引用。",
+          "locator": "整篇论文",
+          "status": "ready"
+        },
+        {
+          "title": "Google Docs 版本历史（3 个草稿）",
+          "kind": "writing-process",
+          "summary": "7 天内 3 个主要版本，字数从 800 增长到 2,400，可证明逐步写作。",
+          "locator": "全文",
+          "status": "ready"
+        },
+        {
+          "title": "Zotero 引用库导出（18 条）",
+          "kind": "citation",
+          "summary": "18 条文献中 16 条有 DOI，2 条书籍章节待补页码。",
+          "locator": "参考文献",
+          "status": "needs-more"
+        },
+        {
+          "title": "ChatGPT 对话记录截图",
+          "kind": "ai-use",
+          "summary": "两段对话：解释均值回归概念、确认 APA 引用格式，未生成正文。",
+          "locator": "第 3 段、第 7 段",
+          "status": "ready"
+        },
+        {
+          "title": "作业要求 + 课程 AI 政策",
+          "kind": "school",
+          "summary": "作业允许使用语法工具，但要求声明 AI 用途。",
+          "locator": "全文",
+          "status": "ready"
+        },
+        {
+          "title": "申诉说明草稿",
+          "kind": "appeal",
+          "summary": "按时间线整理的写作过程说明，待补充导师反馈邮件。",
+          "locator": "全文",
+          "status": "needs-more"
+        }
+      ],
+      "timeline": [
+        {
+          "label": "收到作业题目并确认选题",
+          "detail": "上传了作业要求与课程 AI 政策。",
+          "phase": "topic",
+          "daysAgo": 21
+        },
+        {
+          "label": "文献检索，导入 18 篇文献",
+          "detail": "Zotero 引用库建立，含 DOI 与摘要。",
+          "phase": "research",
+          "daysAgo": 18
+        },
+        {
+          "label": "完成阅读笔记与摘录",
+          "detail": "6 篇核心文献的阅读摘录。",
+          "phase": "reading",
+          "daysAgo": 14
+        },
+        {
+          "label": "完成初稿（约 800 字）",
+          "detail": "Google Docs 第一个主要版本。",
+          "phase": "draft",
+          "daysAgo": 10
+        },
+        {
+          "label": "使用 ChatGPT 澄清统计概念",
+          "detail": "两段对话，未复制生成文本进正文。",
+          "phase": "ai-assist",
+          "daysAgo": 8
+        },
+        {
+          "label": "第二稿修改，扩写到 1,900 字",
+          "detail": "结构调整并补充两节论证。",
+          "phase": "revision",
+          "daysAgo": 6
+        },
+        {
+          "label": "逐条核验引用，2 条待补页码",
+          "detail": "16/18 条引用已确认 DOI。",
+          "phase": "citation-check",
+          "daysAgo": 3
+        },
+        {
+          "label": "提交最终稿",
+          "detail": "final_essay_v3.docx 提交至课程系统。",
+          "phase": "submission",
+          "daysAgo": 1
+        }
+      ]
+    },
     "basic": {
       "title": "基本信息",
       "desc": "这些字段会进入最终报告，用来解释申诉背景和政策边界。",
+      "collapsedHint": "报告导出时需要，可稍后填写。点击展开。",
       "assignment": "作业标题",
       "assignmentPlaceholder": "例如：Research Essay Final Draft",
       "course": "课程名称",
       "coursePlaceholder": "例如：Academic Writing 101",
+      "school": "学校",
+      "schoolPlaceholder": "例如：University of Sydney",
+      "studentId": "学号",
+      "studentIdPlaceholder": "例如：520123456",
       "submittedAt": "提交时间",
       "concern": "被质疑的问题",
       "concernPlaceholder": "例如：AI 检测显示高风险，但我有完整草稿和引用过程。",
@@ -161,6 +280,7 @@
         "generated": "已生成 {count} 张证据卡和时间线节点。",
         "ingesting": "正在用 AI 生成证据卡和时间线...",
         "aiGenerated": "AI 已生成 {cards} 张证据卡和 {events} 个时间线节点。",
+        "basicAutoFilled": "已从文件中自动识别 {count} 项基本信息（学校/学号/课程等），请在基本信息中核对。",
         "localGenerated": "已生成 {count} 张本地证据卡和时间线节点。",
         "reportReady": "报告草稿已准备好，本地评分 {score}/100。",
         "needAuth": "登录后可使用 AI ingest；当前已生成本地证据卡和时间线节点。",
@@ -174,6 +294,12 @@
     "cards": {
       "title": "证据卡",
       "desc": "每张卡都应该回答一个问题：它如何证明真实写作过程、来源可信或 AI 使用边界清楚。",
+      "singleCardHint": "一次只处理一张证据卡，确认这张卡能说明什么，再点下一张继续。",
+      "position": "第 {current} / {total} 张证据卡",
+      "previous": "上一张",
+      "next": "下一张",
+      "quickSelect": "快速切换证据卡",
+      "selectCard": "查看第 {index} 张证据卡",
       "sourceUpload": "上传文件",
       "sourceManual": "手动录入",
       "formTitle": "证据标题",
@@ -206,6 +332,8 @@
       "redactedMask": "[已隐藏]",
       "redactedNone": "未检测到明显敏感信息（邮箱或 8 位以上连续数字）。",
       "redactedDone": "已隐藏 {count} 处敏感信息。",
+      "regenButton": "AI 重新生成证据卡",
+      "regenEmpty": "AI 没有返回新的证据卡，请稍后重试。",
       "noRiskFlags": "暂未标记明显风险点。",
       "notSpecified": "未填写",
       "add": "添加证据卡",
@@ -253,28 +381,33 @@
       "reanalyze": "重新分析",
       "localEval": "本地评估",
       "localRefreshed": "已刷新本地分析。",
-      "dimensions": [
-        {
+      "dimensions": {
+        "citation-authenticity": {
           "title": "引用真实性风险",
           "desc": "引用是否能被 DOI、出版社页面、数据库记录或阅读摘录核验。"
         },
-        {
+        "citation-format": {
           "title": "引用格式风险",
           "desc": "作者、年份、页码、格式与学校要求是否一致。"
         },
-        {
+        "ai-use": {
           "title": "AI 使用解释风险",
           "desc": "AI 工具、日期、用途和是否进入最终稿是否说得清楚。"
         },
-        {
+        "process-gap": {
           "title": "写作过程断点风险",
           "desc": "选题、检索、草稿、修改、提交之间是否缺少可见证据。"
         },
-        {
+        "appeal-completeness": {
           "title": "申诉材料完整性风险",
           "desc": "学校通知、作业要求、证据索引和附录是否完整。"
         }
-      ]
+      },
+      "levels": {
+        "low": "低风险",
+        "medium": "需关注",
+        "high": "待补强"
+      }
     },
     "report": {
       "title": "报告导出",
@@ -315,7 +448,8 @@
         "copyFailed": "复制失败，请使用导出按钮。",
         "pdfGenerating": "正在生成 PDF...",
         "pdfDone": "PDF 已导出。",
-        "pdfFailed": "PDF 生成失败，可改用打印保存为 PDF。"
+        "pdfFallback": "PDF 自动生成受阻，已打开可打印版本；请在打印窗口选择“保存为 PDF”。",
+        "pdfFailed": "PDF 生成失败，请点击“打印”并选择保存为 PDF。"
       }
     },
     "analysisStatus": {
@@ -423,6 +557,21 @@
         "AI 使用说明要具体到工具、日期、用途和是否进入最终稿。",
         "导出前删除无关私人信息，只保留与申诉相关的证据。"
       ]
+    },
+    "localDims": {
+      "citationAuthenticityOk": "已有 {count} 张引用证据卡，可用于核验引用真实性。",
+      "citationAuthenticityMissing": "暂无引用证据卡，引用真实性还缺少可核验支撑。",
+      "citationAuthenticitySuggest": "为关键引用补充 DOI、出版社页面或数据库链接。",
+      "citationFormatUnchecked": "引用格式尚未逐条核对，作者、年份、页码可能与学校要求不一致。",
+      "citationFormatSuggest": "对照学校引用规范逐条核对格式，并修正不一致项。",
+      "aiUseOk": "AI 使用边界已说明，并有 {count} 张 AI 使用记录卡支持。",
+      "aiUseMissing": "缺少 AI 使用记录或边界说明，AI 使用方式还解释不充分。",
+      "aiUseSuggest": "补充带时间的 AI 对话记录或截图，注明用途（如语法润色）。",
+      "processGapFinding": "当前有 {drafts} 张写作过程证据卡和 {events} 个带时间的时间线节点。",
+      "processGapSuggest": "补充草稿版本、版本历史或写作记录，填补过程断点。",
+      "appealCompletenessOk": "学校材料与申诉材料均已上传，申诉包基础完整。",
+      "appealCompletenessMissing": "学校材料或申诉材料尚未齐全，申诉包还缺少关键背景文件。",
+      "appealCompletenessSuggest": "上传作业要求、学校通知或申诉相关邮件，完善申诉材料。"
     }
   },
   "reportDoc": {
@@ -435,6 +584,8 @@
     "basicHeading": "基本信息",
     "assignment": "作业",
     "course": "课程",
+    "school": "学校",
+    "studentId": "学号",
     "submissionTime": "提交时间",
     "concern": "质疑点",
     "policy": "学校/课程政策",

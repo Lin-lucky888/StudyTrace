@@ -79,10 +79,36 @@ export type StudyTraceSettings = {
   requiredEvidenceKinds: EvidenceKind[];
 };
 
+export type RiskDimensionKey =
+  | 'citation-authenticity'
+  | 'citation-format'
+  | 'ai-use'
+  | 'process-gap'
+  | 'appeal-completeness';
+
+export type RiskLevel = 'low' | 'medium' | 'high';
+
+export type RiskDimension = {
+  key: RiskDimensionKey;
+  level: RiskLevel;
+  finding: string;
+  suggestion?: string;
+};
+
+export const riskDimensionKeys: RiskDimensionKey[] = [
+  'citation-authenticity',
+  'citation-format',
+  'ai-use',
+  'process-gap',
+  'appeal-completeness',
+];
+
 export type StudyTraceAnalysis = {
   trustScore: number;
   summary: string;
   riskItems: string[];
+  riskDimensions?: RiskDimension[];
+  processConclusion?: string;
   timelineFindings: string[];
   evidenceGaps: string[];
   appealOutline: string[];
@@ -98,6 +124,13 @@ export type StudyTraceIngestResult = {
   }[];
   evidenceCards: EvidenceCard[];
   timelineEvents: TimelineEvent[];
+  assignment?: {
+    title?: string;
+    courseName?: string;
+    school?: string;
+    studentId?: string;
+    submittedAt?: string;
+  };
   providerStatus?: string;
 };
 
@@ -469,6 +502,19 @@ export function sanitizeSavedAnalysis(
     exportChecklist: takeSavedItems(analysis.exportChecklist)
       .slice(0, MAX_SAVED_ANALYSIS_ITEMS)
       .map((item) => truncateSavedText(item)),
+    riskDimensions: Array.isArray(analysis.riskDimensions)
+      ? analysis.riskDimensions.slice(0, 5).map((dimension) => ({
+          key: dimension.key,
+          level: dimension.level,
+          finding: truncateSavedText(dimension.finding),
+          suggestion: dimension.suggestion
+            ? truncateSavedText(dimension.suggestion)
+            : undefined,
+        }))
+      : undefined,
+    processConclusion: analysis.processConclusion
+      ? truncateSavedText(analysis.processConclusion)
+      : undefined,
     providerStatus: analysis.providerStatus,
   };
 }
@@ -747,6 +793,64 @@ export function getLocalAnalysis({
     riskItems.push(t('analysis.local.riskHighSensitivity'));
   }
 
+  const hasSchoolMaterial = presentKinds.has('school');
+  const hasAppealMaterial = presentKinds.has('appeal');
+  const riskDimensions: RiskDimension[] = [
+    {
+      key: 'citation-authenticity',
+      level: citationCount >= 2 ? 'low' : citationCount ? 'medium' : 'high',
+      finding: citationCount
+        ? t('analysis.localDims.citationAuthenticityOk', {
+            count: citationCount,
+          })
+        : t('analysis.localDims.citationAuthenticityMissing'),
+      suggestion: t('analysis.localDims.citationAuthenticitySuggest'),
+    },
+    {
+      key: 'citation-format',
+      level: citationCount ? 'medium' : 'high',
+      finding: t('analysis.localDims.citationFormatUnchecked'),
+      suggestion: t('analysis.localDims.citationFormatSuggest'),
+    },
+    {
+      key: 'ai-use',
+      level: boundaryReady && aiUseCount ? 'low' : boundaryReady ? 'medium' : 'high',
+      finding:
+        boundaryReady && aiUseCount
+          ? t('analysis.localDims.aiUseOk', { count: aiUseCount })
+          : t('analysis.localDims.aiUseMissing'),
+      suggestion: t('analysis.localDims.aiUseSuggest'),
+    },
+    {
+      key: 'process-gap',
+      level:
+        processCount >= 2 && chronologicalEvents >= 4
+          ? 'low'
+          : processCount || chronologicalEvents
+            ? 'medium'
+            : 'high',
+      finding: t('analysis.localDims.processGapFinding', {
+        drafts: processCount,
+        events: chronologicalEvents,
+      }),
+      suggestion: t('analysis.localDims.processGapSuggest'),
+    },
+    {
+      key: 'appeal-completeness',
+      level:
+        hasSchoolMaterial && hasAppealMaterial
+          ? 'low'
+          : hasSchoolMaterial || hasAppealMaterial
+            ? 'medium'
+            : 'high',
+      finding:
+        hasSchoolMaterial && hasAppealMaterial
+          ? t('analysis.localDims.appealCompletenessOk')
+          : t('analysis.localDims.appealCompletenessMissing'),
+      suggestion: t('analysis.localDims.appealCompletenessSuggest'),
+    },
+  ];
+
   return {
     trustScore: score,
     summary:
@@ -756,6 +860,7 @@ export function getLocalAnalysis({
           ? t('analysis.local.summaryMid')
           : t('analysis.local.summaryLow'),
     riskItems,
+    riskDimensions,
     timelineFindings: [
       chronologicalEvents
         ? t('analysis.local.timelineEvents', { count: chronologicalEvents })

@@ -99,11 +99,93 @@ function buildRenderNode(report: string) {
   return container;
 }
 
+function buildRenderFrame(report: string) {
+  const frame = document.createElement('iframe');
+  frame.setAttribute('aria-hidden', 'true');
+  frame.setAttribute(
+    'style',
+    [
+      'position:fixed',
+      'left:-10000px',
+      'top:0',
+      'width:1px',
+      'height:1px',
+      'border:0',
+      'visibility:hidden',
+    ].join(';')
+  );
+  document.body.appendChild(frame);
+
+  const frameDocument = frame.contentDocument;
+  if (!frameDocument) {
+    frame.remove();
+    throw new Error('Unable to prepare PDF render frame.');
+  }
+
+  frameDocument.open();
+  frameDocument.write(
+    '<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;background:#ffffff"></body></html>'
+  );
+  frameDocument.close();
+
+  const node = buildRenderNode(report);
+  node.style.position = 'relative';
+  node.style.left = '0';
+  node.style.top = '0';
+  frameDocument.body.appendChild(node);
+
+  return { frame, node };
+}
+
+export function openReportPdfPrintFallback(report: string, title: string) {
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) return false;
+
+  printWindow.document.open();
+  printWindow.document.write(`<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>${escapeHtml(title)}</title>
+    <style>
+      @page { size: A4; margin: 18mm; }
+      body {
+        margin: 0;
+        background: #ffffff;
+        color: #111827;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      }
+      main {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+      @media print {
+        main { max-width: none; padding: 0; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>${reportToHtml(report)}</main>
+    <script>
+      window.addEventListener('load', () => {
+        window.setTimeout(() => window.print(), 150);
+      });
+    </script>
+  </body>
+</html>`);
+  printWindow.document.close();
+  printWindow.focus();
+
+  return true;
+}
+
 /**
  * Generate and download a PDF of the report entirely on the client.
  *
- * Renders an inline-styled offscreen node (no Tailwind classes, so no `oklch`),
- * rasterizes it with html2canvas, and slices the canvas across A4 pages.
+ * Renders an inline-styled offscreen node inside a clean iframe (no Tailwind
+ * stylesheets, so no `oklch`), rasterizes it with html2canvas, and slices the
+ * canvas across A4 pages.
  */
 export async function exportReportPdf(report: string, fileName: string) {
   const [{ default: html2canvas }, jsPdfModule] = await Promise.all([
@@ -112,10 +194,11 @@ export async function exportReportPdf(report: string, fileName: string) {
   ]);
   const JsPDF = (jsPdfModule as any).jsPDF || (jsPdfModule as any).default;
 
-  const node = buildRenderNode(report);
-  document.body.appendChild(node);
+  const { frame, node } = buildRenderFrame(report);
 
   try {
+    await new Promise((resolve) => window.setTimeout(resolve, 50));
+
     const canvas = await html2canvas(node, {
       backgroundColor: '#ffffff',
       scale: 2,
@@ -150,6 +233,6 @@ export async function exportReportPdf(report: string, fileName: string) {
 
     pdf.save(fileName);
   } finally {
-    node.remove();
+    frame.remove();
   }
 }
