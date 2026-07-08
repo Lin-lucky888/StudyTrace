@@ -1,19 +1,27 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import {
   AlertTriangle,
+  ArrowLeft,
   BrainCircuit,
   CheckCircle2,
   ClipboardCheck,
   Clock3,
+  Cloud,
+  CloudOff,
   Download,
+  FileDown,
   Files,
   FileText,
+  History,
   Link as LinkIcon,
+  Loader2,
   Plus,
   Printer,
   RefreshCw,
+  Save,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
@@ -39,6 +47,9 @@ import {
 } from '@/shared/components/ui/tabs';
 import { Textarea } from '@/shared/components/ui/textarea';
 import { cn } from '@/shared/lib/utils';
+
+import { extractFileText } from './extract-text';
+import { exportReportPdf } from './report-pdf';
 
 type EvidenceKind =
   | 'draft'
@@ -106,8 +117,15 @@ type StudyTraceAnalysis = {
   providerStatus?: string;
 };
 
+type SavedReport = {
+  id: string;
+  title: string;
+  format: string;
+  content: string;
+  createdAt: string;
+};
+
 const STORAGE_KEY = 'studytrace-workspace-v1';
-const MAX_TEXT_SNIPPET_LENGTH = 12_000;
 const MAX_SAVED_ITEMS = 120;
 const MAX_SAVED_TEXT_LENGTH = 1_200;
 const MAX_SAVED_ANALYSIS_ITEMS = 20;
@@ -252,30 +270,6 @@ function guessEvidenceKind(file: File): EvidenceKind {
     return 'draft';
   }
   return 'process';
-}
-
-function isTextReadable(file: File) {
-  const ext = getExtension(file.name);
-  return (
-    file.type.startsWith('text/') ||
-    [
-      'txt',
-      'md',
-      'markdown',
-      'csv',
-      'json',
-      'rtf',
-      'html',
-      'xml',
-      'bib',
-    ].includes(ext)
-  );
-}
-
-async function readTextSnippet(file: File) {
-  if (!isTextReadable(file)) return '';
-  const text = await file.text();
-  return text.slice(0, MAX_TEXT_SNIPPET_LENGTH);
 }
 
 function truncateSavedText(value: unknown, maxLength = MAX_SAVED_TEXT_LENGTH) {
@@ -507,7 +501,11 @@ function getLocalAnalysis({
   };
 }
 
-export function StudyTraceWorkspace() {
+export function StudyTraceWorkspace({
+  projectId,
+}: {
+  projectId?: string;
+} = {}) {
   const [assignmentTitle, setAssignmentTitle] = useState('');
   const [courseName, setCourseName] = useState('');
   const [institutionPolicy, setInstitutionPolicy] = useState('');
@@ -523,6 +521,19 @@ export function StudyTraceWorkspace() {
   const [activeTab, setActiveTab] = useState('upload');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(Boolean(projectId));
+  const [cloudMode, setCloudMode] = useState(false);
+  const [syncState, setSyncState] = useState<'idle' | 'saving' | 'saved'>(
+    'idle'
+  );
+  const [lastAnalysisRunId, setLastAnalysisRunId] = useState('');
+  const [reportHistory, setReportHistory] = useState<SavedReport[]>([]);
+  const [isSavingReport, setIsSavingReport] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+
+  const storageKey = projectId ? `${STORAGE_KEY}:${projectId}` : STORAGE_KEY;
+  const hydratedRef = useRef(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [manualCard, setManualCard] = useState({
     title: '',
     kind: 'process' as EvidenceKind,
@@ -535,16 +546,16 @@ export function StudyTraceWorkspace() {
     detail: '',
   });
 
-  useEffect(() => {
+  const applyLocalSnapshot = useCallback(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(storageKey);
       if (!saved) return;
       const data = JSON.parse(saved);
       setAssignmentTitle(data.assignmentTitle || '');
       setCourseName(data.courseName || '');
       setInstitutionPolicy(data.institutionPolicy || '');
       setConcern(data.concern || '');
-      setAiBoundary(data.aiBoundary || aiBoundary);
+      if (data.aiBoundary) setAiBoundary(data.aiBoundary);
       setFiles(
         takeSavedItems<UploadedEvidenceFile>(data.files).map(sanitizeSavedFile)
       );
@@ -559,12 +570,189 @@ export function StudyTraceWorkspace() {
         data.analysis ? sanitizeSavedAnalysis(data.analysis) : initialAnalysis
       );
     } catch {
-      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(storageKey);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey]);
+
+  const applyCloudSnapshot = useCallback((snapshot: any) => {
+    const project = snapshot?.project || {};
+    setAssignmentTitle(project.title || '');
+    setCourseName(project.courseName || '');
+    setInstitutionPolicy(project.institutionPolicy || '');
+    setConcern(project.concern || '');
+    if (typeof project.aiBoundary === 'string' && project.aiBoundary) {
+      setAiBoundary(project.aiBoundary);
+    }
+    setSettings(
+      project.settings && typeof project.settings === 'object'
+        ? { ...defaultSettings, ...project.settings }
+        : defaultSettings
+    );
+    setFiles(
+      (Array.isArray(snapshot?.files) ? snapshot.files : []).map(
+        (file: any): UploadedEvidenceFile => ({
+          id: file.id,
+          name: file.name || '',
+          size: Number(file.size) || 0,
+          type: file.type || 'unknown',
+          extension: file.extension || '',
+          lastModified: file.lastModified || '',
+          lastModifiedLabel: file.lastModified
+            ? formatDateLabel(file.lastModified)
+            : '未识别时间',
+          category: (file.category || 'process') as EvidenceKind,
+          extractedText: file.extractedText || undefined,
+        })
+      )
+    );
+    setCards(
+      (Array.isArray(snapshot?.cards) ? snapshot.cards : []).map(
+        (card: any): EvidenceCard => ({
+          id: card.id,
+          title: card.title || '',
+          kind: (card.kind || 'other') as EvidenceKind,
+          source: card.source || '',
+          fileId: card.fileId || undefined,
+          summary: card.summary || '',
+          notes: card.notes || '',
+          strength: (card.strength || 'medium') as EvidenceStrength,
+          tags: Array.isArray(card.tags) ? card.tags : [],
+          riskFlags: Array.isArray(card.riskFlags) ? card.riskFlags : [],
+        })
+      )
+    );
+    setTimeline(
+      (Array.isArray(snapshot?.timeline) ? snapshot.timeline : []).map(
+        (event: any): TimelineEvent => ({
+          id: event.id,
+          date: event.date ? toDateTimeInput(event.date) : '',
+          label: event.label || '',
+          detail: event.detail || '',
+          source: event.source || '手动录入',
+          strength: (event.strength || 'medium') as EvidenceStrength,
+        })
+      )
+    );
+    if (snapshot?.analysis) {
+      setAnalysis(sanitizeSavedAnalysis(snapshot.analysis));
+    }
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
+    const hydrate = async () => {
+      if (!projectId) {
+        applyLocalSnapshot();
+        hydratedRef.current = true;
+        return;
+      }
+
+      setIsLoading(true);
+      try {
+        const response = await fetch('/api/studytrace/projects/get', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectId }),
+        });
+        const result = await response.json();
+        if (cancelled) return;
+
+        if (response.ok && result.code === 0) {
+          applyCloudSnapshot(result.data);
+          setCloudMode(true);
+          setSyncState('saved');
+        } else {
+          // Cloud load failed (no auth / not found). Fall back to local cache.
+          applyLocalSnapshot();
+          setCloudMode(false);
+          setStatusMessage(
+            result?.message?.includes('auth')
+              ? '未登录，当前为本地草稿模式，登录后可云端同步。'
+              : '云端项目加载失败，已切换到本地草稿模式。'
+          );
+        }
+      } catch {
+        if (cancelled) return;
+        applyLocalSnapshot();
+        setCloudMode(false);
+        setStatusMessage('云端连接失败，已切换到本地草稿模式。');
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+          hydratedRef.current = true;
+        }
+      }
+    };
+
+    void hydrate();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
+
+  const buildCloudPayload = useCallback(
+    () => ({
+      projectId,
+      project: {
+        title: assignmentTitle,
+        courseName,
+        institutionPolicy,
+        concern,
+        aiBoundary,
+        settings,
+      },
+      files: files.map((file) => ({
+        id: file.id,
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        extension: file.extension,
+        category: file.category,
+        lastModified: file.lastModified,
+        extractedText: file.extractedText,
+      })),
+      cards: cards.map((card) => ({
+        id: card.id,
+        fileId: card.fileId,
+        title: card.title,
+        kind: card.kind,
+        source: card.source,
+        summary: card.summary,
+        notes: card.notes,
+        strength: card.strength,
+        tags: card.tags,
+        riskFlags: card.riskFlags,
+      })),
+      timeline: timeline.map((event) => ({
+        id: event.id,
+        date: event.date,
+        label: event.label,
+        detail: event.detail,
+        source: event.source,
+        strength: event.strength,
+      })),
+    }),
+    [
+      projectId,
+      assignmentTitle,
+      courseName,
+      institutionPolicy,
+      concern,
+      aiBoundary,
+      settings,
+      files,
+      cards,
+      timeline,
+    ]
+  );
+
+  // Local cache (offline fallback / guest mode).
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+
     const snapshot = {
       assignmentTitle,
       courseName,
@@ -579,7 +767,7 @@ export function StudyTraceWorkspace() {
     };
 
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+      localStorage.setItem(storageKey, JSON.stringify(snapshot));
     } catch (error) {
       if (!isQuotaExceededError(error)) {
         console.warn('Failed to save StudyTrace workspace snapshot', error);
@@ -587,9 +775,9 @@ export function StudyTraceWorkspace() {
       }
 
       try {
-        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(storageKey);
         localStorage.setItem(
-          STORAGE_KEY,
+          storageKey,
           JSON.stringify({
             assignmentTitle,
             courseName,
@@ -604,11 +792,12 @@ export function StudyTraceWorkspace() {
           '浏览器本地草稿空间不足，已只保存基础信息和文件列表。'
         );
       } catch {
-        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(storageKey);
         setStatusMessage('浏览器本地草稿空间不足，已暂停本地自动保存。');
       }
     }
   }, [
+    storageKey,
     assignmentTitle,
     courseName,
     institutionPolicy,
@@ -619,6 +808,49 @@ export function StudyTraceWorkspace() {
     timeline,
     settings,
     analysis,
+  ]);
+
+  // Debounced cloud autosave.
+  useEffect(() => {
+    if (!hydratedRef.current || !cloudMode || !projectId) return;
+
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+    }
+
+    setSyncState('saving');
+    saveTimerRef.current = setTimeout(async () => {
+      try {
+        const response = await fetch('/api/studytrace/projects/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(buildCloudPayload()),
+        });
+        const result = await response.json();
+        setSyncState(response.ok && result.code === 0 ? 'saved' : 'idle');
+      } catch {
+        setSyncState('idle');
+      }
+    }, 1500);
+
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+      }
+    };
+  }, [
+    cloudMode,
+    projectId,
+    buildCloudPayload,
+    assignmentTitle,
+    courseName,
+    institutionPolicy,
+    concern,
+    aiBoundary,
+    files,
+    cards,
+    timeline,
+    settings,
   ]);
 
   const localAnalysis = useMemo(
@@ -661,8 +893,13 @@ export function StudyTraceWorkspace() {
     const nextCards: EvidenceCard[] = [];
     const nextEvents: TimelineEvent[] = [];
 
-    for (const file of list) {
+    for (const [index, file] of list.entries()) {
       const category = guessEvidenceKind(file);
+      setStatusMessage(
+        list.length > 1
+          ? `正在解析第 ${index + 1}/${list.length} 个文件：${file.name}`
+          : `正在解析：${file.name}`
+      );
       const uploadedFile: UploadedEvidenceFile = {
         id: newId(),
         name: file.name,
@@ -672,7 +909,7 @@ export function StudyTraceWorkspace() {
         lastModified: new Date(file.lastModified).toISOString(),
         lastModifiedLabel: formatDateLabel(file.lastModified),
         category,
-        extractedText: await readTextSnippet(file),
+        extractedText: await extractFileText(file),
       };
 
       nextFiles.push(uploadedFile);
@@ -789,6 +1026,7 @@ export function StudyTraceWorkspace() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          projectId,
           assignment: {
             title: assignmentTitle,
             courseName,
@@ -810,6 +1048,7 @@ export function StudyTraceWorkspace() {
       }
 
       setAnalysis(result.data.analysis);
+      setLastAnalysisRunId(result.data.analysisRunId || '');
       setStatusMessage(
         result.data.analysis.providerStatus === 'ai'
           ? 'AI 分析已完成。'
@@ -899,12 +1138,97 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
     sortedTimeline,
   ]);
 
+  const loadReportHistory = useCallback(async () => {
+    if (!cloudMode || !projectId) return;
+    try {
+      const response = await fetch('/api/studytrace/reports/list', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId }),
+      });
+      const result = await response.json();
+      if (response.ok && result.code === 0) {
+        setReportHistory(result.data?.list || []);
+      }
+    } catch {
+      // History is best-effort.
+    }
+  }, [cloudMode, projectId]);
+
+  const saveReportToCloud = useCallback(
+    async (silent = true): Promise<boolean> => {
+      if (!cloudMode || !projectId) return false;
+      try {
+        const response = await fetch('/api/studytrace/reports/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projectId,
+            title: assignmentTitle || '写作过程与 AI 使用边界说明',
+            format: 'markdown',
+            content: report,
+            analysisRunId: lastAnalysisRunId || undefined,
+          }),
+        });
+        const result = await response.json();
+        const ok = response.ok && result.code === 0;
+        if (ok) void loadReportHistory();
+        return ok;
+      } catch {
+        if (!silent) setStatusMessage('保存报告失败，请稍后再试。');
+        return false;
+      }
+    },
+    [
+      cloudMode,
+      projectId,
+      assignmentTitle,
+      report,
+      lastAnalysisRunId,
+      loadReportHistory,
+    ]
+  );
+
+  const handleSaveReport = async () => {
+    if (!cloudMode || !projectId) {
+      setStatusMessage('登录并进入云端项目后可保存报告历史。');
+      return;
+    }
+    setIsSavingReport(true);
+    const ok = await saveReportToCloud(false);
+    setIsSavingReport(false);
+    setStatusMessage(ok ? '报告已保存到云端历史。' : '保存报告失败，请稍后再试。');
+  };
+
+  useEffect(() => {
+    if (cloudMode && projectId) {
+      void loadReportHistory();
+    }
+  }, [cloudMode, projectId, loadReportHistory]);
+
   const downloadReport = () => {
     const blob = new Blob([report], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
     link.download = `studytrace-report-${Date.now()}.md`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    void saveReportToCloud();
+  };
+
+  const downloadSavedReport = (item: SavedReport) => {
+    const extension = item.format === 'markdown' ? 'md' : item.format || 'txt';
+    const blob = new Blob([item.content], {
+      type: 'text/markdown;charset=utf-8',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const stamp = new Date(item.createdAt).getTime() || Date.now();
+    link.download = `studytrace-report-${stamp}.${extension}`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -924,6 +1248,28 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
     window.print();
   };
 
+  const exportPdf = async () => {
+    setIsExportingPdf(true);
+    setStatusMessage('正在生成 PDF...');
+    try {
+      await exportReportPdf(report, `studytrace-report-${Date.now()}.pdf`);
+      setStatusMessage('PDF 已导出。');
+      void saveReportToCloud();
+    } catch (error) {
+      console.warn('StudyTrace export pdf failed:', error);
+      setStatusMessage('PDF 生成失败，可改用打印保存为 PDF。');
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
+  const syncLabel =
+    syncState === 'saving'
+      ? '正在同步...'
+      : syncState === 'saved'
+        ? '已云端保存'
+        : '本地草稿';
+
   const resetWorkspace = () => {
     setAssignmentTitle('');
     setCourseName('');
@@ -939,6 +1285,17 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
     setAnalysis(initialAnalysis);
     setStatusMessage('工作区已重置。');
   };
+
+  if (isLoading) {
+    return (
+      <main className="bg-muted/20 flex min-h-dvh items-center justify-center">
+        <div className="text-muted-foreground flex items-center gap-3 text-sm">
+          <Loader2 className="size-5 animate-spin" />
+          正在加载项目...
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="bg-muted/20 min-h-dvh">
@@ -962,13 +1319,45 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
         <div className="container py-6 md:py-8">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-3xl space-y-3">
-              <Badge variant="outline" className="gap-2">
-                <ShieldCheck className="size-3.5" />
-                StudyTrace
-              </Badge>
+              <div className="flex flex-wrap items-center gap-2">
+                {projectId ? (
+                  <Button
+                    asChild
+                    variant="ghost"
+                    size="sm"
+                    className="studytrace-no-print h-7 gap-1 px-2"
+                  >
+                    <Link href="/studytrace">
+                      <ArrowLeft className="size-3.5" />
+                      我的项目
+                    </Link>
+                  </Button>
+                ) : null}
+                <Badge variant="outline" className="gap-2">
+                  <ShieldCheck className="size-3.5" />
+                  StudyTrace
+                </Badge>
+                {projectId ? (
+                  <Badge
+                    variant="outline"
+                    className="studytrace-no-print gap-1.5 text-xs"
+                  >
+                    {syncState === 'saving' ? (
+                      <Loader2 className="size-3 animate-spin" />
+                    ) : cloudMode ? (
+                      <Cloud className="size-3" />
+                    ) : (
+                      <CloudOff className="size-3" />
+                    )}
+                    {cloudMode ? syncLabel : '本地草稿'}
+                  </Badge>
+                ) : null}
+              </div>
               <div className="space-y-2">
                 <h1 className="text-2xl font-semibold tracking-normal md:text-4xl">
-                  写作过程证据工作台
+                  {assignmentTitle
+                    ? assignmentTitle
+                    : '写作过程证据工作台'}
                 </h1>
                 <p className="text-muted-foreground text-sm leading-6 md:text-base">
                   把草稿、引用来源、反馈、AI
@@ -1074,7 +1463,8 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                     上传材料
                   </CardTitle>
                   <CardDescription>
-                    支持任意格式。文本类文件会读取预览；PDF、DOCX、图片、压缩包等会保留元数据用于证据组织。
+                    支持任意格式。文本、PDF、DOCX
+                    会在浏览器本地提取文字用于分析；图片、压缩包等会保留元数据用于证据组织。原始文件不会上传，仅保存提取的文字。
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -1471,7 +1861,7 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                     报告导出
                   </CardTitle>
                   <CardDescription>
-                    导出 Markdown 后可以继续编辑；打印可保存为 PDF。
+                    导出 Markdown 可继续编辑；导出 PDF 可直接提交；登录后可保存到云端历史。
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -1484,14 +1874,40 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                       )}
                       生成分析
                     </Button>
+                    <Button
+                      variant="outline"
+                      onClick={exportPdf}
+                      disabled={isExportingPdf}
+                    >
+                      {isExportingPdf ? (
+                        <RefreshCw className="size-4 animate-spin" />
+                      ) : (
+                        <FileDown className="size-4" />
+                      )}
+                      导出 PDF
+                    </Button>
                     <Button variant="outline" onClick={downloadReport}>
                       <Download className="size-4" />
                       导出 Markdown
                     </Button>
                     <Button variant="outline" onClick={printReport}>
                       <Printer className="size-4" />
-                      打印 / 保存 PDF
+                      打印
                     </Button>
+                    {projectId ? (
+                      <Button
+                        variant="outline"
+                        onClick={handleSaveReport}
+                        disabled={isSavingReport || !cloudMode}
+                      >
+                        {isSavingReport ? (
+                          <RefreshCw className="size-4 animate-spin" />
+                        ) : (
+                          <Save className="size-4" />
+                        )}
+                        保存到云端
+                      </Button>
+                    ) : null}
                     <Button variant="ghost" onClick={copyReport}>
                       <ClipboardCheck className="size-4" />
                       复制
@@ -1520,6 +1936,52 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                       {report}
                     </pre>
                   </div>
+
+                  {projectId && cloudMode ? (
+                    <div className="studytrace-no-print space-y-3">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <History className="size-4" />
+                        报告历史
+                        {reportHistory.length ? (
+                          <span className="text-muted-foreground font-normal">
+                            （{reportHistory.length}）
+                          </span>
+                        ) : null}
+                      </div>
+                      {reportHistory.length ? (
+                        <div className="space-y-2">
+                          {reportHistory.map((item) => (
+                            <div
+                              key={item.id}
+                              className="bg-background flex flex-col gap-2 rounded-md border p-3 md:flex-row md:items-center md:justify-between"
+                            >
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-medium">
+                                  {item.title || '未命名报告'}
+                                </div>
+                                <div className="text-muted-foreground text-xs">
+                                  {formatDateLabel(item.createdAt)} ·{' '}
+                                  {item.format.toUpperCase()}
+                                </div>
+                              </div>
+                              <div className="flex shrink-0 gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => downloadSavedReport(item)}
+                                >
+                                  <Download className="size-4" />
+                                  下载
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <EmptyLine text="还没有保存的报告版本。点击“保存到云端”会创建一个历史版本。" />
+                      )}
+                    </div>
+                  ) : null}
                 </CardContent>
               </Card>
             </TabsContent>

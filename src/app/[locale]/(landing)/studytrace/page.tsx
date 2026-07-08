@@ -1,12 +1,12 @@
 import { setRequestLocale } from 'next-intl/server';
 
-import { StudyTraceWorkspace } from '@/shared/blocks/studytrace/workspace';
+import { StudyTraceProjects } from '@/shared/blocks/studytrace/projects';
 import { getMetadata } from '@/shared/lib/seo';
 
 export const generateMetadata = getMetadata({
-  title: 'StudyTrace - Academic Process Evidence Workspace',
+  title: 'StudyTrace - My Projects',
   description:
-    'Upload essays and supporting materials, generate evidence cards, build academic timelines, explain risks, and export appeal report drafts.',
+    'Manage your academic process evidence projects: upload materials, generate evidence cards, build timelines, explain risks, and export appeal report drafts.',
   canonicalUrl: '/studytrace',
 });
 
@@ -18,5 +18,5 @@ export default async function StudyTracePage({
   const { locale } = await params;
   setRequestLocale(locale);
 
-  return <StudyTraceWorkspace />;
+  return <StudyTraceProjects />;
 }
