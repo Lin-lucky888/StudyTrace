@@ -12,6 +12,8 @@ import {
   Cloud,
   CloudOff,
   Download,
+  EyeOff,
+  Link2,
   FileDown,
   Files,
   FileText,
@@ -53,7 +55,6 @@ import {
   applyIngestFileCategories,
   buildCardFromFile,
   buildTimelineFromFile,
-  defaultActionItems,
   defaultSettings,
   enrichEvidenceCard,
   enrichTimelineEvent,
@@ -130,6 +131,8 @@ export function StudyTraceWorkspace({
   const [hasAnalyzed, setHasAnalyzed] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
+  const [timelineView, setTimelineView] = useState<'phase' | 'time'>('phase');
+  const [highlightedCardId, setHighlightedCardId] = useState('');
   const [isLoading, setIsLoading] = useState(Boolean(projectId));
   const [cloudMode, setCloudMode] = useState(false);
   const [syncState, setSyncState] = useState<'idle' | 'saving' | 'saved'>(
@@ -537,6 +540,25 @@ export function StudyTraceWorkspace({
     [timeline]
   );
 
+  // Academic-process view: events grouped by phase, in process order.
+  const timelineByPhase = useMemo(
+    () =>
+      timelinePhaseKeys
+        .map((phase) => ({
+          phase,
+          events: sortedTimeline.filter(
+            (event) => (event.phase || 'draft') === phase
+          ),
+        }))
+        .filter((group) => group.events.length > 0),
+    [sortedTimeline]
+  );
+
+  const cardTitleById = useMemo(
+    () => new Map(cards.map((card) => [card.id, card.title])),
+    [cards]
+  );
+
   const groupedFiles = useMemo(
     () =>
       evidenceKindKeys.map((kind) => ({
@@ -804,6 +826,78 @@ export function StudyTraceWorkspace({
     );
   };
 
+  // Real card actions (previously shown as text-only suggestions).
+  const toggleCardInReport = (card: EvidenceCard) => {
+    const nextStatus: SubmitStatus =
+      card.submitStatus === 'ready' ? 'do-not-submit' : 'ready';
+    updateCard(card.id, { submitStatus: nextStatus });
+    setStatusMessage(
+      nextStatus === 'ready'
+        ? t('workspace.cards.includedInReport')
+        : t('workspace.cards.excludedFromReport')
+    );
+  };
+
+  // Jump from a timeline event to one of its linked evidence cards.
+  const openCardFromTimeline = (cardId: string) => {
+    setActiveTab('cards');
+    setHighlightedCardId(cardId);
+    window.setTimeout(() => {
+      document
+        .getElementById(`evidence-card-${cardId}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 150);
+    window.setTimeout(() => setHighlightedCardId(''), 2600);
+  };
+
+  const focusCardSource = (cardId: string) => {
+    const input = document.getElementById(`card-source-${cardId}`);
+    if (input instanceof HTMLInputElement) {
+      input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      input.focus({ preventScroll: true });
+    }
+  };
+
+  const generateCardExplanation = (card: EvidenceCard) => {
+    const explanation = t('workspace.cards.explainTemplate', {
+      proof: card.proofTarget || t('workspace.cards.notSpecified'),
+      source: card.source || t('workspace.cards.notSpecified'),
+      locator: card.paperLocator || t('workspace.cards.notSpecified'),
+      strength: t(`strength.${card.strength}`),
+    });
+    updateCard(card.id, {
+      notes: card.notes ? `${card.notes}\n${explanation}` : explanation,
+    });
+    setStatusMessage(t('workspace.cards.explainAdded'));
+  };
+
+  const redactCardSensitiveInfo = (card: EvidenceCard) => {
+    const mask = t('workspace.cards.redactedMask');
+    // Emails and long digit runs (student IDs, phone numbers).
+    const patterns = [/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, /(?<!\d)\d{8,}(?!\d)/g];
+    let count = 0;
+    const redact = (value: string) =>
+      patterns.reduce(
+        (acc, pattern) =>
+          acc.replace(pattern, () => {
+            count += 1;
+            return mask;
+          }),
+        value
+      );
+
+    const title = redact(card.title);
+    const summary = redact(card.summary);
+    const notes = redact(card.notes);
+
+    if (!count) {
+      setStatusMessage(t('workspace.cards.redactedNone'));
+      return;
+    }
+    updateCard(card.id, { title, summary, notes });
+    setStatusMessage(t('workspace.cards.redactedDone', { count }));
+  };
+
   const deleteCard = (id: string) => {
     setCards((prev) => prev.filter((card) => card.id !== id));
     // Detach the card from any timeline events referencing it.
@@ -819,6 +913,62 @@ export function StudyTraceWorkspace({
   const deleteTimelineEvent = (id: string) => {
     setTimeline((prev) => prev.filter((event) => event.id !== id));
   };
+
+  // Shared event row for both the by-time and by-phase timeline views.
+  const renderTimelineEvent = (event: TimelineEvent, index: number) => (
+    <div
+      key={event.id}
+      className="bg-background grid gap-3 rounded-lg border p-4 md:grid-cols-[32px_1fr_auto]"
+    >
+      <div className="bg-primary/10 text-primary flex size-8 items-center justify-center rounded-md text-sm font-medium">
+        {index + 1}
+      </div>
+      <div className="space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-medium">{event.label}</span>
+          <Badge variant="outline">
+            {event.phase
+              ? t(`timelinePhases.${event.phase}`)
+              : t('workspace.timeline.phaseUnknown')}
+          </Badge>
+          <StrengthBadge strength={event.strength} />
+        </div>
+        <p className="text-muted-foreground text-sm">
+          {event.date ? formatDateLabel(event.date) : t('date.empty')} ·{' '}
+          {event.source}
+        </p>
+        <p className="text-sm leading-6">{event.detail}</p>
+        {event.cardIds?.length ? (
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            <span className="text-muted-foreground text-xs">
+              {t('workspace.timeline.linkedCards', {
+                count: event.cardIds.length,
+              })}
+            </span>
+            {event.cardIds.map((cardId) => (
+              <button
+                key={cardId}
+                type="button"
+                onClick={() => openCardFromTimeline(cardId)}
+                className="bg-primary/10 text-primary hover:bg-primary/20 max-w-56 truncate rounded-full px-2 py-0.5 text-xs transition-colors"
+              >
+                {cardTitleById.get(cardId) ||
+                  t('workspace.timeline.cardMissing')}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label={t('workspace.timeline.deleteAria')}
+        onClick={() => deleteTimelineEvent(event.id)}
+      >
+        <Trash2 className="size-4" />
+      </Button>
+    </div>
+  );
 
   // Deleting a file also removes its derived cards and timeline events, so no
   // orphaned evidence stays behind. Manual entries are never touched.
@@ -976,7 +1126,9 @@ export function StudyTraceWorkspace({
     const reportCards =
       reportVariant === 'school-submission'
         ? cards.filter((card) => card.submitStatus === 'ready')
-        : cards;
+        : reportVariant === 'appeal-statement'
+          ? cards.filter((card) => card.submitStatus !== 'do-not-submit')
+          : cards;
     const showInternalRisks = reportVariant !== 'school-submission';
 
     const evidenceLines = reportCards
@@ -1046,6 +1198,12 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
 - ${t('reportDoc.submissionTime')}: ${submittedAt ? formatDateLabel(submittedAt) : notFilled}
 - ${t('reportDoc.concern')}: ${concern || notFilled}
 - ${t('reportDoc.policy')}: ${institutionPolicy || notFilled}
+
+## ${t('reportDoc.processHeading')}
+
+${processConclusion}
+
+${analysis.timelineFindings.map((item) => `- ${item}`).join('\n')}
 
 ## ${t('reportDoc.summaryHeading')}
 
@@ -1456,18 +1614,6 @@ ${detectorCaveatLine}${t('reportDoc.disclaimer')}
             </CardContent>
           </Card>
 
-          <Card className="border-primary/25 bg-primary/5 rounded-lg">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <ShieldCheck className="size-5" />
-                {t('workspace.privacy.title')}
-              </CardTitle>
-              <CardDescription className="leading-6">
-                {t('workspace.privacy.desc')}
-              </CardDescription>
-            </CardHeader>
-          </Card>
-
           <div className="studytrace-no-print grid gap-2 md:grid-cols-3">
             {guidedSteps.map((step, index) => {
               const isCurrent =
@@ -1768,13 +1914,16 @@ ${detectorCaveatLine}${t('reportDoc.disclaimer')}
                       cards.map((card) => (
                         <div
                           key={card.id}
+                          id={`evidence-card-${card.id}`}
                           className={cn(
-                            'bg-background rounded-lg border-l-4 p-4 shadow-sm',
+                            'bg-background rounded-lg border-l-4 p-4 shadow-sm transition-shadow',
                             card.submitStatus === 'ready'
                               ? 'border-l-green-600'
                               : card.submitStatus === 'do-not-submit'
                                 ? 'border-l-red-500'
-                                : 'border-l-amber-500'
+                                : 'border-l-amber-500',
+                            highlightedCardId === card.id &&
+                              'ring-primary ring-2'
                           )}
                         >
                           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -1879,6 +2028,20 @@ ${detectorCaveatLine}${t('reportDoc.disclaimer')}
                                 ))}
                               </select>
                             </Field>
+                            <Field label={t('workspace.cards.formSource')}>
+                              <Input
+                                id={`card-source-${card.id}`}
+                                value={card.source}
+                                placeholder={t(
+                                  'workspace.cards.formSourcePlaceholder'
+                                )}
+                                onChange={(event) =>
+                                  updateCard(card.id, {
+                                    source: event.target.value,
+                                  })
+                                }
+                              />
+                            </Field>
                             <Field label={t('workspace.cards.formNotes')}>
                               <Textarea
                                 value={card.notes}
@@ -1909,17 +2072,48 @@ ${detectorCaveatLine}${t('reportDoc.disclaimer')}
                                 {t('workspace.cards.actions')}
                               </div>
                               <div className="flex flex-wrap gap-2">
-                                {(card.actionItems?.length
-                                  ? card.actionItems
-                                  : defaultActionItems(
-                                      card.submitStatus || 'needs-more',
-                                      t
-                                    )
-                                ).map((item) => (
-                                  <Badge key={item} variant="secondary">
-                                    {item}
-                                  </Badge>
-                                ))}
+                                <Button
+                                  size="sm"
+                                  variant={
+                                    card.submitStatus === 'ready'
+                                      ? 'outline'
+                                      : 'secondary'
+                                  }
+                                  onClick={() => toggleCardInReport(card)}
+                                >
+                                  {card.submitStatus === 'ready' ? (
+                                    <EyeOff className="size-3.5" />
+                                  ) : (
+                                    <ClipboardCheck className="size-3.5" />
+                                  )}
+                                  {card.submitStatus === 'ready'
+                                    ? t('workspace.cards.actionExclude')
+                                    : t('workspace.cards.actionInclude')}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => focusCardSource(card.id)}
+                                >
+                                  <Link2 className="size-3.5" />
+                                  {t('workspace.cards.actionSource')}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => generateCardExplanation(card)}
+                                >
+                                  <Sparkles className="size-3.5" />
+                                  {t('workspace.cards.actionExplain')}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => redactCardSensitiveInfo(card)}
+                                >
+                                  <EyeOff className="size-3.5" />
+                                  {t('workspace.cards.actionRedact')}
+                                </Button>
                               </div>
                             </div>
                           </div>
@@ -2025,55 +2219,52 @@ ${detectorCaveatLine}${t('reportDoc.disclaimer')}
                     </div>
                   </div>
 
-                  <div className="space-y-3">
-                    {sortedTimeline.length ? (
-                      sortedTimeline.map((event, index) => (
-                        <div
-                          key={event.id}
-                          className="bg-background grid gap-3 rounded-lg border p-4 md:grid-cols-[32px_1fr_auto]"
-                        >
-                          <div className="bg-primary/10 text-primary flex size-8 items-center justify-center rounded-md text-sm font-medium">
-                            {index + 1}
-                          </div>
-                          <div className="space-y-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="font-medium">{event.label}</span>
-                              <Badge variant="outline">
-                                {event.phase
-                                  ? t(`timelinePhases.${event.phase}`)
-                                  : t('workspace.timeline.phaseUnknown')}
-                              </Badge>
-                              <StrengthBadge strength={event.strength} />
-                            </div>
-                            <p className="text-muted-foreground text-sm">
-                              {event.date
-                                ? formatDateLabel(event.date)
-                                : t('date.empty')}{' '}
-                              · {event.source}
-                            </p>
-                            <p className="text-sm leading-6">{event.detail}</p>
-                            {event.cardIds?.length ? (
-                              <p className="text-muted-foreground text-xs">
-                                {t('workspace.timeline.linkedCards', {
-                                  count: event.cardIds.length,
-                                })}
-                              </p>
-                            ) : null}
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label={t('workspace.timeline.deleteAria')}
-                            onClick={() => deleteTimelineEvent(event.id)}
-                          >
-                            <Trash2 className="size-4" />
-                          </Button>
-                        </div>
-                      ))
-                    ) : (
-                      <EmptyLine text={t('workspace.timeline.empty')} />
-                    )}
+                  <div className="flex items-center gap-1">
+                    <Button
+                      size="sm"
+                      variant={timelineView === 'phase' ? 'secondary' : 'ghost'}
+                      onClick={() => setTimelineView('phase')}
+                    >
+                      {t('workspace.timeline.viewPhase')}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={timelineView === 'time' ? 'secondary' : 'ghost'}
+                      onClick={() => setTimelineView('time')}
+                    >
+                      {t('workspace.timeline.viewTime')}
+                    </Button>
                   </div>
+
+                  {!sortedTimeline.length ? (
+                    <EmptyLine text={t('workspace.timeline.empty')} />
+                  ) : timelineView === 'time' ? (
+                    <div className="space-y-3">
+                      {sortedTimeline.map((event, index) =>
+                        renderTimelineEvent(event, index)
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-5">
+                      {timelineByPhase.map((group) => (
+                        <div key={group.phase} className="space-y-3">
+                          <div className="flex items-center gap-2">
+                            <Badge>{t(`timelinePhases.${group.phase}`)}</Badge>
+                            <span className="text-muted-foreground text-xs">
+                              {t('workspace.timeline.phaseEventCount', {
+                                count: group.events.length,
+                              })}
+                            </span>
+                          </div>
+                          <div className="border-primary/20 space-y-3 border-l-2 pl-4">
+                            {group.events.map((event, index) =>
+                              renderTimelineEvent(event, index)
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -2388,110 +2579,6 @@ ${detectorCaveatLine}${t('reportDoc.disclaimer')}
                   {statusMessage}
                 </p>
               ) : null}
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-lg">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <SlidersHorizontal className="size-4" />
-                {t('workspace.sidebar.settingsTitle')}
-              </CardTitle>
-              <CardDescription>
-                {t('workspace.sidebar.settingsDesc')}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Field label={t('workspace.sidebar.evidenceStandard')}>
-                <select
-                  value={settings.evidenceStandard}
-                  onChange={(event) =>
-                    setSettings((prev) => ({
-                      ...prev,
-                      evidenceStandard: event.target
-                        .value as StudyTraceSettings['evidenceStandard'],
-                    }))
-                  }
-                  className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
-                >
-                  <option value="balanced">
-                    {t('workspace.sidebar.standardBalanced')}
-                  </option>
-                  <option value="strict">
-                    {t('workspace.sidebar.standardStrict')}
-                  </option>
-                </select>
-              </Field>
-              <Field
-                label={t('workspace.sidebar.riskSensitivity', {
-                  value: settings.riskSensitivity,
-                })}
-              >
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={settings.riskSensitivity}
-                  onChange={(event) =>
-                    setSettings((prev) => ({
-                      ...prev,
-                      riskSensitivity: Number(event.target.value),
-                    }))
-                  }
-                  className="accent-primary w-full"
-                />
-              </Field>
-              <Field label={t('workspace.sidebar.aiPolicy')}>
-                <select
-                  value={settings.aiPolicy}
-                  onChange={(event) =>
-                    setSettings((prev) => ({
-                      ...prev,
-                      aiPolicy: event.target
-                        .value as StudyTraceSettings['aiPolicy'],
-                    }))
-                  }
-                  className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
-                >
-                  <option value="none">
-                    {t('workspace.sidebar.policyNone')}
-                  </option>
-                  <option value="assistive-only">
-                    {t('workspace.sidebar.policyAssistive')}
-                  </option>
-                  <option value="drafting-with-disclosure">
-                    {t('workspace.sidebar.policyDisclosure')}
-                  </option>
-                </select>
-              </Field>
-              <label className="flex items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={settings.includeDetectorCaveat}
-                  onChange={(event) =>
-                    setSettings((prev) => ({
-                      ...prev,
-                      includeDetectorCaveat: event.target.checked,
-                    }))
-                  }
-                  className="accent-primary mt-1"
-                />
-                {t('workspace.sidebar.detectorCaveat')}
-              </label>
-              <label className="flex items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={settings.includeCitationAudit}
-                  onChange={(event) =>
-                    setSettings((prev) => ({
-                      ...prev,
-                      includeCitationAudit: event.target.checked,
-                    }))
-                  }
-                  className="accent-primary mt-1"
-                />
-                {t('workspace.sidebar.citationAudit')}
-              </label>
             </CardContent>
           </Card>
 

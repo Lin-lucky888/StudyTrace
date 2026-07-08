@@ -4,7 +4,7 @@
     "brand": {
       "title": "StudyTrace",
       "logo": {
-        "src": "/logo.png",
+        "src": "/logo.png?v=2",
         "alt": "StudyTrace",
         "width": 100,
         "height": 100
@@ -65,7 +65,7 @@
       "title": "StudyTrace",
       "description": "Academic process proof and appeal evidence chain generation for international students.",
       "logo": {
-        "src": "/logo.png",
+        "src": "/logo.png?v=2",
         "alt": "StudyTrace",
         "width": 1024,
         "height": 1024

@@ -4,7 +4,7 @@
     "brand": {
       "title": "StudyTrace",
       "logo": {
-        "src": "/logo.png",
+        "src": "/logo.png?v=2",
         "alt": "StudyTrace",
         "width": 100,
         "height": 100
@@ -65,7 +65,7 @@
       "title": "StudyTrace",
       "description": "面向留学生的学术过程证明与申诉证据链生成工具。",
       "logo": {
-        "src": "/logo.png",
+        "src": "/logo.png?v=2",
         "alt": "StudyTrace",
         "width": 100,
         "height": 100

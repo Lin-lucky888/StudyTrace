@@ -3,7 +3,7 @@
     "brand": {
       "title": "StudyTrace",
       "logo": {
-        "src": "/logo.png",
+        "src": "/logo.png?v=2",
         "alt": "StudyTrace"
       },
       "url": "/admin"

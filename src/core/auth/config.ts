@@ -73,6 +73,15 @@ const authOptions = {
   emailAndPassword: {
     enabled: true,
   },
+  session: {
+    // Cache the session in a short-lived signed cookie so most requests can
+    // validate the session without a database round trip. The remote DB adds
+    // ~300ms per query, and nearly every API route checks the session first.
+    cookieCache: {
+      enabled: true,
+      maxAge: 5 * 60, // re-validate against the DB every 5 minutes
+    },
+  },
   logger: {
     verboseLogging: false,
     // Disable all logs during build and production

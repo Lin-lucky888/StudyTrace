@@ -1,4 +1,4 @@
-import { and, count, desc, eq, isNull } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNull } from 'drizzle-orm';
 
 import { db } from '@/core/db';
 import {
@@ -303,32 +303,49 @@ export async function listStudyTraceProjects({
 
   if (!rows.length) return [];
 
-  const summaries = await Promise.all(
-    rows.map(async (row) => {
-      const [fileCountRow] = await db()
-        .select({ value: count() })
-        .from(studytraceFile)
-        .where(eq(studytraceFile.projectId, row.id));
-      const [cardCountRow] = await db()
-        .select({ value: count() })
-        .from(studytraceEvidenceCard)
-        .where(eq(studytraceEvidenceCard.projectId, row.id));
+  // Aggregate counts for all projects in two queries instead of 2 per project;
+  // the DB is often remote, so every round trip is expensive.
+  const projectIds = rows.map((row) => row.id);
+  const [fileCounts, cardCounts] = await Promise.all([
+    db()
+      .select({ projectId: studytraceFile.projectId, value: count() })
+      .from(studytraceFile)
+      .where(inArray(studytraceFile.projectId, projectIds))
+      .groupBy(studytraceFile.projectId),
+    db()
+      .select({
+        projectId: studytraceEvidenceCard.projectId,
+        value: count(),
+      })
+      .from(studytraceEvidenceCard)
+      .where(inArray(studytraceEvidenceCard.projectId, projectIds))
+      .groupBy(studytraceEvidenceCard.projectId),
+  ]);
 
-      return {
-        id: row.id,
-        title: row.title,
-        courseName: row.courseName,
-        latestTrustScore: row.latestTrustScore,
-        lastAnalyzedAt: toIso(row.lastAnalyzedAt),
-        createdAt: toIso(row.createdAt),
-        updatedAt: toIso(row.updatedAt),
-        fileCount: fileCountRow?.value || 0,
-        cardCount: cardCountRow?.value || 0,
-      } satisfies StudyTraceProjectSummary;
-    })
+  const fileCountById = new Map<string, number>(
+    fileCounts.map(
+      (row: { projectId: string; value: number }) =>
+        [row.projectId, row.value] as [string, number]
+    )
+  );
+  const cardCountById = new Map<string, number>(
+    cardCounts.map(
+      (row: { projectId: string; value: number }) =>
+        [row.projectId, row.value] as [string, number]
+    )
   );
 
-  return summaries;
+  return rows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    courseName: row.courseName,
+    latestTrustScore: row.latestTrustScore,
+    lastAnalyzedAt: toIso(row.lastAnalyzedAt),
+    createdAt: toIso(row.createdAt),
+    updatedAt: toIso(row.updatedAt),
+    fileCount: fileCountById.get(row.id) || 0,
+    cardCount: cardCountById.get(row.id) || 0,
+  })) satisfies StudyTraceProjectSummary[];
 }
 
 export async function findStudyTraceProject(
@@ -399,25 +416,30 @@ export async function getStudyTraceProjectSnapshot(
   const project = await findStudyTraceProject(projectId, userId);
   if (!project) return null;
 
-  const fileRows: StudyTraceFileRow[] = await db()
-    .select()
-    .from(studytraceFile)
-    .where(eq(studytraceFile.projectId, projectId))
-    .orderBy(studytraceFile.createdAt);
-
-  const cardRows: StudyTraceCardRow[] = await db()
-    .select()
-    .from(studytraceEvidenceCard)
-    .where(eq(studytraceEvidenceCard.projectId, projectId))
-    .orderBy(studytraceEvidenceCard.sort);
-
-  const timelineRows: StudyTraceTimelineRow[] = await db()
-    .select()
-    .from(studytraceTimelineEvent)
-    .where(eq(studytraceTimelineEvent.projectId, projectId))
-    .orderBy(studytraceTimelineEvent.sort);
-
-  const analysis = await getLatestProjectAnalysis(projectId);
+  // Fetch related rows in parallel; the DB round trip dominates latency.
+  const [fileRows, cardRows, timelineRows, analysis] = (await Promise.all([
+    db()
+      .select()
+      .from(studytraceFile)
+      .where(eq(studytraceFile.projectId, projectId))
+      .orderBy(studytraceFile.createdAt),
+    db()
+      .select()
+      .from(studytraceEvidenceCard)
+      .where(eq(studytraceEvidenceCard.projectId, projectId))
+      .orderBy(studytraceEvidenceCard.sort),
+    db()
+      .select()
+      .from(studytraceTimelineEvent)
+      .where(eq(studytraceTimelineEvent.projectId, projectId))
+      .orderBy(studytraceTimelineEvent.sort),
+    getLatestProjectAnalysis(projectId),
+  ])) as [
+    StudyTraceFileRow[],
+    StudyTraceCardRow[],
+    StudyTraceTimelineRow[],
+    Awaited<ReturnType<typeof getLatestProjectAnalysis>>,
+  ];
 
   return {
     project: {

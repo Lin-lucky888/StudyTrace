@@ -21,6 +21,12 @@ const nextConfig = {
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
     deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
     qualities: [60, 70, 75],
+    // Allow local images with query strings (e.g. /logo.png?v=2 cache busting).
+    localPatterns: [
+      {
+        pathname: '/**',
+      },
+    ],
     remotePatterns: [
       {
         protocol: 'https',
