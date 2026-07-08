@@ -58,7 +58,7 @@ export function Hero({
               {texts && texts.length > 0 ? (
                 <h1 className="text-foreground max-w-4xl text-4xl leading-tight font-semibold text-balance md:text-6xl">
                   {texts[0]}
-                  <Highlighter action="underline" color="#2563eb">
+                  <Highlighter action="underline" color="#0D9488">
                     {highlightText}
                   </Highlighter>
                   {texts[1]}
@@ -150,7 +150,7 @@ export function Hero({
         {texts && texts.length > 0 ? (
           <h1 className="text-foreground text-4xl font-semibold text-balance sm:mt-12 sm:text-6xl">
             {texts[0]}
-            <Highlighter action="underline" color="#FF9800">
+            <Highlighter action="underline" color="#0D9488">
               {highlightText}
             </Highlighter>
             {texts[1]}

@@ -30,14 +30,19 @@ export function Features({
         </ScrollAnimation>
 
         <ScrollAnimation delay={0.2}>
-          <div className="relative mx-auto grid divide-x divide-y border *:p-12 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="relative mx-auto grid divide-x divide-y overflow-hidden rounded-xl border *:p-8 md:*:p-10 sm:grid-cols-2 lg:grid-cols-3">
             {section.items?.map((item, idx) => (
-              <div className="space-y-3" key={idx}>
-                <div className="flex items-center gap-2">
-                  <SmartIcon name={item.icon as string} size={24} />
-                  <h3 className="text-sm font-medium">{item.title}</h3>
+              <div
+                className="hover:bg-muted/40 space-y-4 transition-colors duration-200"
+                key={idx}
+              >
+                <div className="bg-primary/10 text-primary flex size-10 items-center justify-center rounded-lg">
+                  <SmartIcon name={item.icon as string} size={20} />
                 </div>
-                <p className="text-sm">{item.description}</p>
+                <h3 className="text-base font-semibold">{item.title}</h3>
+                <p className="text-muted-foreground text-sm leading-6">
+                  {item.description}
+                </p>
               </div>
             ))}
           </div>

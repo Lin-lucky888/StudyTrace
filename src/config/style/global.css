@@ -10,7 +10,12 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground font-sans;
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+  /* Academic serif voice for display headings only; UI headings stay sans. */
+  h1,
+  h2 {
+    @apply font-serif tracking-tight;
   }
 }
 

@@ -1456,7 +1456,7 @@ ${detectorCaveatLine}${t('reportDoc.disclaimer')}
             </CardContent>
           </Card>
 
-          <Card className="rounded-lg border-blue-200 bg-blue-50/60 dark:border-blue-950 dark:bg-blue-950/20">
+          <Card className="border-primary/25 bg-primary/5 rounded-lg">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <ShieldCheck className="size-5" />
@@ -2474,7 +2474,7 @@ ${detectorCaveatLine}${t('reportDoc.disclaimer')}
                       includeDetectorCaveat: event.target.checked,
                     }))
                   }
-                  className="mt-1"
+                  className="accent-primary mt-1"
                 />
                 {t('workspace.sidebar.detectorCaveat')}
               </label>
@@ -2488,7 +2488,7 @@ ${detectorCaveatLine}${t('reportDoc.disclaimer')}
                       includeCitationAudit: event.target.checked,
                     }))
                   }
-                  className="mt-1"
+                  className="accent-primary mt-1"
                 />
                 {t('workspace.sidebar.citationAudit')}
               </label>

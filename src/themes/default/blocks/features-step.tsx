@@ -41,11 +41,11 @@ export function FeaturesStep({
               {section.items?.map((item, idx) => (
                 <div className="space-y-6" key={idx}>
                   <div className="text-center">
-                    <span className="mx-auto flex size-6 items-center justify-center rounded-full bg-zinc-500/15 text-sm font-medium">
+                    <span className="bg-primary/10 text-primary mx-auto flex size-7 items-center justify-center rounded-full text-sm font-semibold">
                       {idx + 1}
                     </span>
                     <div className="relative">
-                      <div className="mx-auto my-6 w-fit">
+                      <div className="bg-card text-primary mx-auto my-6 flex size-12 w-fit items-center justify-center rounded-xl border p-3 shadow-sm">
                         {item.icon && (
                           <SmartIcon name={item.icon as string} size={24} />
                         )}
