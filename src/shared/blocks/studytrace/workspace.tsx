@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useLocale, useTranslations } from 'next-intl';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -72,6 +73,7 @@ type UploadedEvidenceFile = {
   lastModifiedLabel: string;
   category: EvidenceKind;
   extractedText?: string;
+  checksum?: string;
 };
 
 type EvidenceCard = {
@@ -130,37 +132,18 @@ const MAX_SAVED_ITEMS = 120;
 const MAX_SAVED_TEXT_LENGTH = 1_200;
 const MAX_SAVED_ANALYSIS_ITEMS = 20;
 
-const evidenceKindLabels: Record<EvidenceKind, string> = {
-  draft: '草稿与版本',
-  source: '引用来源',
-  'ai-disclosure': 'AI 使用边界',
-  feedback: '反馈与批注',
-  version: '版本历史',
-  process: '写作过程',
-  other: '其他材料',
-};
+// next-intl translator scoped to the `studytrace` namespace. Passed into
+// module-level helpers so their generated copy stays locale-aware.
+type StudyTraceTranslator = ReturnType<typeof useTranslations>;
 
-const marketSignals = [
-  {
-    name: '写作过程信号',
-    source: 'GPTZero Authorship',
-    detail: '关注复制粘贴、编辑时长、协作者数量、版本变化等过程证据。',
-  },
-  {
-    name: '相似度与引用检查',
-    source: 'Turnitin Draft Coach',
-    detail: '把相似度、引用规范、语法反馈拆成独立检查维度。',
-  },
-  {
-    name: '解释型风险信号',
-    source: 'Copyleaks AI Logic',
-    detail: '不仅给风险分数，还解释触发信号、文本片段和可能来源。',
-  },
-  {
-    name: '多维内容质量',
-    source: 'Originality.ai',
-    detail: 'AI、抄袭、事实、可读性、语法等可以组合成报告维度。',
-  },
+const evidenceKindKeys: EvidenceKind[] = [
+  'draft',
+  'source',
+  'ai-disclosure',
+  'feedback',
+  'version',
+  'process',
+  'other',
 ];
 
 const defaultSettings: StudyTraceSettings = {
@@ -172,19 +155,24 @@ const defaultSettings: StudyTraceSettings = {
   requiredEvidenceKinds: ['draft', 'source', 'ai-disclosure', 'process'],
 };
 
-const initialAnalysis: StudyTraceAnalysis = {
-  trustScore: 38,
-  summary:
-    '先上传草稿、参考文献、反馈记录和 AI 使用说明，系统会把材料整理成证据卡、时间线和申诉报告草稿。',
-  riskItems: ['当前材料不足，无法形成可信的写作过程链。'],
-  timelineFindings: ['尚未建立时间线。'],
-  evidenceGaps: ['缺少草稿版本、引用来源和 AI 使用边界说明。'],
-  appealOutline: ['补充材料后生成申诉陈述。'],
-  aiBoundaryStatement:
-    '请说明 AI 是否用于选题、提纲、润色、语法检查或资料整理。',
-  exportChecklist: ['上传至少 3 类证据。', '填写课程与作业信息。'],
-  providerStatus: 'local',
-};
+function getInitialAnalysis(t: StudyTraceTranslator): StudyTraceAnalysis {
+  return {
+    trustScore: 38,
+    summary: t('analysis.initial.summary'),
+    riskItems: [t('analysis.initial.risk')],
+    timelineFindings: [t('analysis.initial.timeline')],
+    evidenceGaps: [t('analysis.initial.gap')],
+    appealOutline: [t('analysis.initial.appeal')],
+    aiBoundaryStatement: t('analysis.initial.aiBoundary'),
+    exportChecklist: t.raw('analysis.initial.checklist') as string[],
+    providerStatus: 'local',
+  };
+}
+
+// Date formatting reads these module singletons, set from the active locale on
+// each render, so the many call sites below stay parameter-free.
+let activeDateLocale = 'en';
+let unrecognizedTimeLabel = 'Unrecognized time';
 
 const newId = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -200,8 +188,8 @@ function formatFileSize(bytes: number) {
 
 function formatDateLabel(value: string | number | Date) {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '未识别时间';
-  return new Intl.DateTimeFormat('zh-CN', {
+  if (Number.isNaN(date.getTime())) return unrecognizedTimeLabel;
+  return new Intl.DateTimeFormat(activeDateLocale, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -220,6 +208,28 @@ function toDateTimeInput(value: string | number | Date) {
 function getExtension(name: string) {
   const dot = name.lastIndexOf('.');
   return dot >= 0 ? name.slice(dot + 1).toLowerCase() : '';
+}
+
+// Content fingerprint. Computed in the browser over the raw bytes so the
+// original file never leaves the device, yet the SHA-256 can later prove the
+// exact content that existed at upload time. Requires a secure context
+// (https / localhost); degrades to an empty string otherwise.
+async function sha256File(file: File): Promise<string> {
+  try {
+    if (!globalThis.crypto?.subtle) return '';
+    const buffer = await file.arrayBuffer();
+    const digest = await globalThis.crypto.subtle.digest('SHA-256', buffer);
+    return Array.from(new Uint8Array(digest))
+      .map((byte) => byte.toString(16).padStart(2, '0'))
+      .join('');
+  } catch {
+    return '';
+  }
+}
+
+function shortChecksum(value?: string) {
+  if (!value) return '';
+  return `${value.slice(0, 8)}…${value.slice(-6)}`;
 }
 
 function guessEvidenceKind(file: File): EvidenceKind {
@@ -294,6 +304,7 @@ function sanitizeSavedFile(file: UploadedEvidenceFile): UploadedEvidenceFile {
     lastModified: truncateSavedText(file.lastModified, 80),
     lastModifiedLabel: truncateSavedText(file.lastModifiedLabel, 80),
     category: file.category,
+    checksum: file.checksum,
   };
 }
 
@@ -368,8 +379,11 @@ function strengthFromKind(kind: EvidenceKind): EvidenceStrength {
   return 'weak';
 }
 
-function buildCardFromFile(file: UploadedEvidenceFile): EvidenceCard {
-  const kindLabel = evidenceKindLabels[file.category];
+function buildCardFromFile(
+  file: UploadedEvidenceFile,
+  t: StudyTraceTranslator
+): EvidenceCard {
+  const kindLabel = t(`evidenceKinds.${file.category}`);
   const preview = file.extractedText
     ? file.extractedText.replace(/\s+/g, ' ').slice(0, 180)
     : '';
@@ -378,11 +392,15 @@ function buildCardFromFile(file: UploadedEvidenceFile): EvidenceCard {
     id: newId(),
     title: file.name,
     kind: file.category,
-    source: '上传文件',
+    source: t('workspace.cards.sourceUpload'),
     fileId: file.id,
     summary: preview
-      ? `${kindLabel}：${preview}`
-      : `${kindLabel}：${file.extension || file.type || '未知格式'} 文件，${formatFileSize(file.size)}。`,
+      ? t('workspace.cards.summaryFromPreview', { kind: kindLabel, preview })
+      : t('workspace.cards.summaryFromMeta', {
+          kind: kindLabel,
+          ext: file.extension || file.type || 'unknown',
+          size: formatFileSize(file.size),
+        }),
     notes: '',
     strength: strengthFromKind(file.category),
     tags: [kindLabel, file.extension || 'file'].filter(Boolean),
@@ -390,13 +408,19 @@ function buildCardFromFile(file: UploadedEvidenceFile): EvidenceCard {
   };
 }
 
-function buildTimelineFromFile(file: UploadedEvidenceFile): TimelineEvent {
+function buildTimelineFromFile(
+  file: UploadedEvidenceFile,
+  t: StudyTraceTranslator
+): TimelineEvent {
   return {
     id: newId(),
     date: toDateTimeInput(file.lastModified),
-    label: `上传证据：${file.name}`,
-    detail: `${evidenceKindLabels[file.category]}，文件最后修改时间为 ${file.lastModifiedLabel}。`,
-    source: '文件时间戳',
+    label: t('workspace.timeline.uploadLabel', { name: file.name }),
+    detail: t('workspace.timeline.uploadDetail', {
+      kind: t(`evidenceKinds.${file.category}`),
+      time: file.lastModifiedLabel,
+    }),
+    source: t('workspace.timeline.sourceTimestamp'),
     strength: strengthFromKind(file.category),
   };
 }
@@ -407,12 +431,14 @@ function getLocalAnalysis({
   timeline,
   aiBoundary,
   settings,
+  t,
 }: {
   files: UploadedEvidenceFile[];
   cards: EvidenceCard[];
   timeline: TimelineEvent[];
   aiBoundary: string;
   settings: StudyTraceSettings;
+  t: StudyTraceTranslator;
 }): StudyTraceAnalysis {
   const presentKinds = new Set(cards.map((card) => card.kind));
   const missingRequired = settings.requiredEvidenceKinds.filter(
@@ -422,6 +448,7 @@ function getLocalAnalysis({
   const chronologicalEvents = timeline.filter((event) => event.date).length;
   const boundaryReady = aiBoundary.trim().length >= 40;
   const sourceCount = cards.filter((card) => card.kind === 'source').length;
+  const listSeparator = activeDateLocale.startsWith('zh') ? '、' : ', ';
 
   const score = Math.max(
     8,
@@ -442,61 +469,55 @@ function getLocalAnalysis({
 
   const riskItems = [
     missingRequired.length
-      ? `缺少 ${missingRequired.map((kind) => evidenceKindLabels[kind]).join('、')}，容易让申诉材料显得片面。`
-      : '核心证据类型已覆盖，后续重点是补充每张卡与作业要求的对应关系。',
+      ? t('analysis.local.riskMissing', {
+          kinds: missingRequired
+            .map((kind) => t(`evidenceKinds.${kind}`))
+            .join(listSeparator),
+        })
+      : t('analysis.local.riskCovered'),
     chronologicalEvents < 4
-      ? '时间线事件偏少，建议补充选题、查资料、提纲、初稿、修改、最终提交等节点。'
-      : '时间线已经能呈现连续写作过程。',
+      ? t('analysis.local.riskFewTimeline')
+      : t('analysis.local.riskTimelineOk'),
     boundaryReady
-      ? 'AI 使用边界有基本说明，建议继续写明具体工具、用途和未用于代写的范围。'
-      : 'AI 使用边界说明太短，容易被解读为回避关键问题。',
+      ? t('analysis.local.riskBoundaryOk')
+      : t('analysis.local.riskBoundaryShort'),
   ];
 
   if (settings.includeCitationAudit && sourceCount < 2) {
-    riskItems.push(
-      '引用来源证据不足，建议上传参考文献、阅读笔记、数据库检索截图或网页保存记录。'
-    );
+    riskItems.push(t('analysis.local.riskSourceShort'));
   }
 
   return {
     trustScore: score,
     summary:
       score >= 75
-        ? '材料已经接近可提交状态，重点检查时间线一致性、引用来源可验证性和 AI 使用声明措辞。'
+        ? t('analysis.local.summaryHigh')
         : score >= 50
-          ? '材料有初步可信度，但还需要补足关键证据并把每项材料与作业过程对应起来。'
-          : '当前材料仍偏分散，建议先建立完整时间线，再补齐草稿、来源和 AI 边界证据。',
+          ? t('analysis.local.summaryMid')
+          : t('analysis.local.summaryLow'),
     riskItems,
     timelineFindings: [
       chronologicalEvents
-        ? `已识别 ${chronologicalEvents} 个带时间的过程节点。`
-        : '未识别到可用时间节点。',
+        ? t('analysis.local.timelineEvents', { count: chronologicalEvents })
+        : t('analysis.local.timelineNoEvents'),
       cards.some((card) => card.kind === 'draft')
-        ? '已有草稿类证据，可支撑“逐步写作”叙事。'
-        : '缺少草稿或阶段版本，较难证明文本不是一次性生成。',
+        ? t('analysis.local.timelineHasDraft')
+        : t('analysis.local.timelineNoDraft'),
       cards.some((card) => card.kind === 'feedback')
-        ? '已有反馈或批注，可作为人与人互动、修改过程的旁证。'
-        : '可以补充教师、同伴、导师反馈来增强过程可信度。',
+        ? t('analysis.local.timelineHasFeedback')
+        : t('analysis.local.timelineNoFeedback'),
     ],
     evidenceGaps: missingRequired.length
-      ? missingRequired.map((kind) => `补充${evidenceKindLabels[kind]}。`)
-      : ['把每张证据卡的“说明”写成可直接引用的申诉语言。'],
-    appealOutline: [
-      '说明作业背景、提交时间和被质疑的问题。',
-      '按时间线解释写作过程：选题、资料检索、提纲、草稿、修改和最终稿。',
-      '列出引用来源与阅读/摘录证据，说明哪些观点来自外部材料。',
-      '说明 AI 工具的使用边界，区分允许的辅助和未发生的代写行为。',
-      '请求复核时附上证据清单，并承认可改进的引用或披露细节。',
-    ],
+      ? missingRequired.map((kind) =>
+          t('analysis.local.gapSupplement', {
+            kind: t(`evidenceKinds.${kind}`),
+          })
+        )
+      : [t('analysis.local.gapWriteAppeal')],
+    appealOutline: t.raw('analysis.local.appealOutline') as string[],
     aiBoundaryStatement:
-      aiBoundary.trim() ||
-      '我仅在允许范围内使用 AI 进行语法检查、结构建议或资料整理，没有让 AI 直接代写最终正文。具体使用记录见证据卡。',
-    exportChecklist: [
-      '报告中不要声称“检测器一定错误”，而是强调证据链和复核请求。',
-      '每个引用来源都应能被打开或由截图、笔记、书目信息验证。',
-      'AI 使用说明要具体到工具、日期、用途和是否进入最终稿。',
-      '导出前删除无关私人信息，只保留与申诉相关的证据。',
-    ],
+      aiBoundary.trim() || t('analysis.local.aiBoundaryStatement'),
+    exportChecklist: t.raw('analysis.local.exportChecklist') as string[],
     providerStatus: 'local',
   };
 }
@@ -506,18 +527,27 @@ export function StudyTraceWorkspace({
 }: {
   projectId?: string;
 } = {}) {
+  const t = useTranslations('studytrace');
+  const locale = useLocale();
+
+  // Keep the parameter-free date formatters in sync with the active locale.
+  activeDateLocale = locale === 'zh' ? 'zh-CN' : 'en';
+  unrecognizedTimeLabel = t('date.unknown');
+
   const [assignmentTitle, setAssignmentTitle] = useState('');
   const [courseName, setCourseName] = useState('');
   const [institutionPolicy, setInstitutionPolicy] = useState('');
   const [concern, setConcern] = useState('');
-  const [aiBoundary, setAiBoundary] = useState(
-    '我使用 AI 的范围仅限于理解题目、整理提纲、检查语法或润色个别句子；最终观点、资料选择、段落组织和正文表达由我完成。'
+  const [aiBoundary, setAiBoundary] = useState(() =>
+    t('aiBoundaryDefaultInput')
   );
   const [files, setFiles] = useState<UploadedEvidenceFile[]>([]);
   const [cards, setCards] = useState<EvidenceCard[]>([]);
   const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
   const [settings, setSettings] = useState<StudyTraceSettings>(defaultSettings);
-  const [analysis, setAnalysis] = useState<StudyTraceAnalysis>(initialAnalysis);
+  const [analysis, setAnalysis] = useState<StudyTraceAnalysis>(() =>
+    getInitialAnalysis(t)
+  );
   const [activeTab, setActiveTab] = useState('upload');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
@@ -567,12 +597,12 @@ export function StudyTraceWorkspace({
       );
       setSettings(data.settings || defaultSettings);
       setAnalysis(
-        data.analysis ? sanitizeSavedAnalysis(data.analysis) : initialAnalysis
+        data.analysis ? sanitizeSavedAnalysis(data.analysis) : getInitialAnalysis(t)
       );
     } catch {
       localStorage.removeItem(storageKey);
     }
-  }, [storageKey]);
+  }, [storageKey, t]);
 
   const applyCloudSnapshot = useCallback((snapshot: any) => {
     const project = snapshot?.project || {};
@@ -599,9 +629,10 @@ export function StudyTraceWorkspace({
           lastModified: file.lastModified || '',
           lastModifiedLabel: file.lastModified
             ? formatDateLabel(file.lastModified)
-            : '未识别时间',
+            : t('date.unknown'),
           category: (file.category || 'process') as EvidenceKind,
           extractedText: file.extractedText || undefined,
+          checksum: file.checksum || undefined,
         })
       )
     );
@@ -628,7 +659,7 @@ export function StudyTraceWorkspace({
           date: event.date ? toDateTimeInput(event.date) : '',
           label: event.label || '',
           detail: event.detail || '',
-          source: event.source || '手动录入',
+          source: event.source || t('workspace.cards.sourceManual'),
           strength: (event.strength || 'medium') as EvidenceStrength,
         })
       )
@@ -636,7 +667,7 @@ export function StudyTraceWorkspace({
     if (snapshot?.analysis) {
       setAnalysis(sanitizeSavedAnalysis(snapshot.analysis));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -668,15 +699,15 @@ export function StudyTraceWorkspace({
           setCloudMode(false);
           setStatusMessage(
             result?.message?.includes('auth')
-              ? '未登录，当前为本地草稿模式，登录后可云端同步。'
-              : '云端项目加载失败，已切换到本地草稿模式。'
+              ? t('workspace.hydrate.guest')
+              : t('workspace.hydrate.loadFailed')
           );
         }
       } catch {
         if (cancelled) return;
         applyLocalSnapshot();
         setCloudMode(false);
-        setStatusMessage('云端连接失败，已切换到本地草稿模式。');
+        setStatusMessage(t('workspace.hydrate.connectFailed'));
       } finally {
         if (!cancelled) {
           setIsLoading(false);
@@ -713,6 +744,7 @@ export function StudyTraceWorkspace({
         category: file.category,
         lastModified: file.lastModified,
         extractedText: file.extractedText,
+        checksum: file.checksum,
       })),
       cards: cards.map((card) => ({
         id: card.id,
@@ -788,12 +820,10 @@ export function StudyTraceWorkspace({
             settings,
           })
         );
-        setStatusMessage(
-          '浏览器本地草稿空间不足，已只保存基础信息和文件列表。'
-        );
+        setStatusMessage(t('workspace.localCacheReduced'));
       } catch {
         localStorage.removeItem(storageKey);
-        setStatusMessage('浏览器本地草稿空间不足，已暂停本地自动保存。');
+        setStatusMessage(t('workspace.localCachePaused'));
       }
     }
   }, [
@@ -861,18 +891,19 @@ export function StudyTraceWorkspace({
         timeline,
         aiBoundary,
         settings,
+        t,
       }),
-    [files, cards, timeline, aiBoundary, settings]
+    [files, cards, timeline, aiBoundary, settings, t]
   );
 
   const coverage = useMemo(() => {
     const kinds = new Set(cards.map((card) => card.kind));
     return settings.requiredEvidenceKinds.map((kind) => ({
       kind,
-      label: evidenceKindLabels[kind],
+      label: t(`evidenceKinds.${kind}`),
       ready: kinds.has(kind),
     }));
-  }, [cards, settings.requiredEvidenceKinds]);
+  }, [cards, settings.requiredEvidenceKinds, t]);
 
   const sortedTimeline = useMemo(
     () =>
@@ -888,7 +919,7 @@ export function StudyTraceWorkspace({
     const list = Array.from(incomingFiles);
     if (!list.length) return;
 
-    setStatusMessage('正在整理上传材料...');
+    setStatusMessage(t('workspace.upload.status.organizing'));
     const nextFiles: UploadedEvidenceFile[] = [];
     const nextCards: EvidenceCard[] = [];
     const nextEvents: TimelineEvent[] = [];
@@ -897,9 +928,17 @@ export function StudyTraceWorkspace({
       const category = guessEvidenceKind(file);
       setStatusMessage(
         list.length > 1
-          ? `正在解析第 ${index + 1}/${list.length} 个文件：${file.name}`
-          : `正在解析：${file.name}`
+          ? t('workspace.upload.status.parsingMulti', {
+              index: index + 1,
+              total: list.length,
+              name: file.name,
+            })
+          : t('workspace.upload.status.parsingOne', { name: file.name })
       );
+      const [extractedText, checksum] = await Promise.all([
+        extractFileText(file),
+        sha256File(file),
+      ]);
       const uploadedFile: UploadedEvidenceFile = {
         id: newId(),
         name: file.name,
@@ -909,12 +948,13 @@ export function StudyTraceWorkspace({
         lastModified: new Date(file.lastModified).toISOString(),
         lastModifiedLabel: formatDateLabel(file.lastModified),
         category,
-        extractedText: await extractFileText(file),
+        extractedText,
+        checksum,
       };
 
       nextFiles.push(uploadedFile);
-      nextCards.push(buildCardFromFile(uploadedFile));
-      nextEvents.push(buildTimelineFromFile(uploadedFile));
+      nextCards.push(buildCardFromFile(uploadedFile, t));
+      nextEvents.push(buildTimelineFromFile(uploadedFile, t));
     }
 
     setFiles((prev) => [...nextFiles, ...prev]);
@@ -927,28 +967,32 @@ export function StudyTraceWorkspace({
         timeline: [...nextEvents, ...timeline],
         aiBoundary,
         settings,
+        t,
       })
     );
-    setStatusMessage(`已生成 ${nextCards.length} 张证据卡和时间线节点。`);
+    setStatusMessage(
+      t('workspace.upload.status.generated', { count: nextCards.length })
+    );
     setActiveTab('cards');
   };
 
   const addManualCard = () => {
     if (!manualCard.title.trim() && !manualCard.summary.trim()) {
-      setStatusMessage('请先填写证据标题或说明。');
+      setStatusMessage(t('workspace.cards.needTitleOrSummary'));
       return;
     }
 
     const kind = manualCard.kind;
+    const kindLabel = t(`evidenceKinds.${kind}`);
     const card: EvidenceCard = {
       id: newId(),
-      title: manualCard.title || evidenceKindLabels[kind],
+      title: manualCard.title || kindLabel,
       kind,
-      source: '手动录入',
+      source: t('workspace.cards.sourceManual'),
       summary: manualCard.summary,
       notes: manualCard.notes,
       strength: strengthFromKind(kind),
-      tags: [evidenceKindLabels[kind]],
+      tags: [kindLabel],
       riskFlags: [],
     };
 
@@ -959,12 +1003,12 @@ export function StudyTraceWorkspace({
       summary: '',
       notes: '',
     });
-    setStatusMessage('已添加证据卡。');
+    setStatusMessage(t('workspace.cards.added'));
   };
 
   const addManualEvent = () => {
     if (!manualEvent.label.trim()) {
-      setStatusMessage('请填写时间线节点标题。');
+      setStatusMessage(t('workspace.timeline.needLabel'));
       return;
     }
 
@@ -974,7 +1018,7 @@ export function StudyTraceWorkspace({
         date: manualEvent.date,
         label: manualEvent.label,
         detail: manualEvent.detail,
-        source: '手动录入',
+        source: t('workspace.cards.sourceManual'),
         strength: 'medium',
       },
       ...prev,
@@ -984,7 +1028,7 @@ export function StudyTraceWorkspace({
       label: '',
       detail: '',
     });
-    setStatusMessage('已添加时间线节点。');
+    setStatusMessage(t('workspace.timeline.added'));
   };
 
   const updateCard = (id: string, patch: Partial<EvidenceCard>) => {
@@ -1008,16 +1052,17 @@ export function StudyTraceWorkspace({
       timeline,
       aiBoundary,
       settings,
+      t,
     });
 
     if (!cards.length) {
       setAnalysis(fallback);
-      setStatusMessage('请先上传或录入证据材料。');
+      setStatusMessage(t('workspace.analysisStatus.needMaterials'));
       return;
     }
 
     setIsAnalyzing(true);
-    setStatusMessage('正在生成风险解释和申诉结构...');
+    setStatusMessage(t('workspace.analysisStatus.generating'));
 
     try {
       const response = await fetch('/api/studytrace/analyze', {
@@ -1027,6 +1072,7 @@ export function StudyTraceWorkspace({
         },
         body: JSON.stringify({
           projectId,
+          locale,
           assignment: {
             title: assignmentTitle,
             courseName,
@@ -1051,17 +1097,17 @@ export function StudyTraceWorkspace({
       setLastAnalysisRunId(result.data.analysisRunId || '');
       setStatusMessage(
         result.data.analysis.providerStatus === 'ai'
-          ? 'AI 分析已完成。'
-          : '已生成本地分析；登录或配置服务后可获得 AI 版本。'
+          ? t('workspace.analysisStatus.aiDone')
+          : t('workspace.analysisStatus.localDone')
       );
     } catch (error) {
       setAnalysis(fallback);
       setStatusMessage(
         error instanceof Error && error.message.includes('auth')
-          ? 'AI 分析需要登录；当前已生成本地版本。'
+          ? t('workspace.analysisStatus.needAuth')
           : error instanceof Error && error.message.includes('credits')
-            ? 'AI 分析需要可用积分；当前已生成本地版本。'
-            : 'AI 分析暂不可用，已生成本地版本。'
+            ? t('workspace.analysisStatus.needCredits')
+            : t('workspace.analysisStatus.unavailable')
       );
     } finally {
       setIsAnalyzing(false);
@@ -1073,57 +1119,72 @@ export function StudyTraceWorkspace({
     const evidenceLines = cards
       .map(
         (card, index) =>
-          `${index + 1}. ${card.title}｜${evidenceKindLabels[card.kind]}｜可信度：${card.strength}\n   - ${card.summary || '未填写摘要'}\n   - 说明：${card.notes || '未填写'}`
+          `${index + 1}. ${card.title} | ${t(`evidenceKinds.${card.kind}`)} | ${t('reportDoc.credibility')}: ${t(`strength.${card.strength}`)}\n   - ${card.summary || t('reportDoc.noSummary')}\n   - ${t('reportDoc.notesLabel')}: ${card.notes || t('reportDoc.empty')}`
       )
       .join('\n');
 
     const timelineLines = sortedTimeline
       .map(
         (event, index) =>
-          `${index + 1}. ${event.date ? formatDateLabel(event.date) : '未填写时间'}｜${event.label}\n   - ${event.detail || '未填写'}\n   - 来源：${event.source}`
+          `${index + 1}. ${event.date ? formatDateLabel(event.date) : t('date.empty')} | ${event.label}\n   - ${event.detail || t('reportDoc.empty')}\n   - ${t('reportDoc.sourceLabel')}: ${event.source}`
       )
       .join('\n');
 
-    return `# 写作过程与 AI 使用边界说明
+    const fingerprintLines = files
+      .map(
+        (file, index) =>
+          `${index + 1}. ${file.name}\n   - ${t('reportDoc.fingerprintSha')}: ${file.checksum || t('reportDoc.fingerprintUncomputed')}\n   - ${t('reportDoc.fingerprintLastModified')}: ${file.lastModifiedLabel}`
+      )
+      .join('\n');
 
-## 基本信息
+    const notFilled = t('reportDoc.notFilled');
 
-- 作业：${assignmentTitle || '未填写'}
-- 课程：${courseName || '未填写'}
-- 质疑点：${concern || '未填写'}
-- 学校/课程政策：${institutionPolicy || '未填写'}
+    return `# ${t('reportDoc.title')}
 
-## 总结
+## ${t('reportDoc.basicHeading')}
 
-可信材料评分：${analysis.trustScore}/100
+- ${t('reportDoc.assignment')}: ${assignmentTitle || notFilled}
+- ${t('reportDoc.course')}: ${courseName || notFilled}
+- ${t('reportDoc.concern')}: ${concern || notFilled}
+- ${t('reportDoc.policy')}: ${institutionPolicy || notFilled}
+
+## ${t('reportDoc.summaryHeading')}
+
+${t('reportDoc.trustScore', { score: analysis.trustScore })}
 
 ${analysis.summary}
 
-## AI 使用边界
+## ${t('reportDoc.aiBoundaryHeading')}
 
-${analysis.aiBoundaryStatement || aiBoundary || '未填写'}
+${analysis.aiBoundaryStatement || aiBoundary || notFilled}
 
-## 证据卡
+## ${t('reportDoc.cardsHeading')}
 
-${evidenceLines || '暂无证据卡。'}
+${evidenceLines || t('reportDoc.noCards')}
 
-## 时间线
+## ${t('reportDoc.timelineHeading')}
 
-${timelineLines || '暂无时间线。'}
+${timelineLines || t('reportDoc.noTimeline')}
 
-## 风险解释
+## ${t('reportDoc.fingerprintHeading')}
+
+${t('reportDoc.fingerprintNote')}
+
+${fingerprintLines || t('reportDoc.noFiles')}
+
+## ${t('reportDoc.riskHeading')}
 
 ${analysis.riskItems.map((item) => `- ${item}`).join('\n')}
 
-## 需要补充的材料
+## ${t('reportDoc.gapsHeading')}
 
 ${analysis.evidenceGaps.map((item) => `- ${item}`).join('\n')}
 
-## 申诉陈述结构
+## ${t('reportDoc.appealHeading')}
 
 ${analysis.appealOutline.map((item, index) => `${index + 1}. ${item}`).join('\n')}
 
-## 导出前检查
+## ${t('reportDoc.checklistHeading')}
 
 ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
 `;
@@ -1134,8 +1195,10 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
     cards,
     concern,
     courseName,
+    files,
     institutionPolicy,
     sortedTimeline,
+    t,
   ]);
 
   const loadReportHistory = useCallback(async () => {
@@ -1164,7 +1227,7 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             projectId,
-            title: assignmentTitle || '写作过程与 AI 使用边界说明',
+            title: assignmentTitle || t('reportDoc.title'),
             format: 'markdown',
             content: report,
             analysisRunId: lastAnalysisRunId || undefined,
@@ -1175,7 +1238,7 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
         if (ok) void loadReportHistory();
         return ok;
       } catch {
-        if (!silent) setStatusMessage('保存报告失败，请稍后再试。');
+        if (!silent) setStatusMessage(t('workspace.report.status.saveFailed'));
         return false;
       }
     },
@@ -1186,18 +1249,23 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
       report,
       lastAnalysisRunId,
       loadReportHistory,
+      t,
     ]
   );
 
   const handleSaveReport = async () => {
     if (!cloudMode || !projectId) {
-      setStatusMessage('登录并进入云端项目后可保存报告历史。');
+      setStatusMessage(t('workspace.report.status.needProject'));
       return;
     }
     setIsSavingReport(true);
     const ok = await saveReportToCloud(false);
     setIsSavingReport(false);
-    setStatusMessage(ok ? '报告已保存到云端历史。' : '保存报告失败，请稍后再试。');
+    setStatusMessage(
+      ok
+        ? t('workspace.report.status.saved')
+        : t('workspace.report.status.saveFailed')
+    );
   };
 
   useEffect(() => {
@@ -1238,9 +1306,9 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
   const copyReport = async () => {
     try {
       await navigator.clipboard.writeText(report);
-      setStatusMessage('报告已复制到剪贴板。');
+      setStatusMessage(t('workspace.report.status.copied'));
     } catch {
-      setStatusMessage('复制失败，请使用导出按钮。');
+      setStatusMessage(t('workspace.report.status.copyFailed'));
     }
   };
 
@@ -1250,14 +1318,14 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
 
   const exportPdf = async () => {
     setIsExportingPdf(true);
-    setStatusMessage('正在生成 PDF...');
+    setStatusMessage(t('workspace.report.status.pdfGenerating'));
     try {
       await exportReportPdf(report, `studytrace-report-${Date.now()}.pdf`);
-      setStatusMessage('PDF 已导出。');
+      setStatusMessage(t('workspace.report.status.pdfDone'));
       void saveReportToCloud();
     } catch (error) {
       console.warn('StudyTrace export pdf failed:', error);
-      setStatusMessage('PDF 生成失败，可改用打印保存为 PDF。');
+      setStatusMessage(t('workspace.report.status.pdfFailed'));
     } finally {
       setIsExportingPdf(false);
     }
@@ -1265,25 +1333,23 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
 
   const syncLabel =
     syncState === 'saving'
-      ? '正在同步...'
+      ? t('workspace.syncSaving')
       : syncState === 'saved'
-        ? '已云端保存'
-        : '本地草稿';
+        ? t('workspace.syncSaved')
+        : t('workspace.localDraft');
 
   const resetWorkspace = () => {
     setAssignmentTitle('');
     setCourseName('');
     setInstitutionPolicy('');
     setConcern('');
-    setAiBoundary(
-      '我使用 AI 的范围仅限于理解题目、整理提纲、检查语法或润色个别句子；最终观点、资料选择、段落组织和正文表达由我完成。'
-    );
+    setAiBoundary(t('aiBoundaryDefaultInput'));
     setFiles([]);
     setCards([]);
     setTimeline([]);
     setSettings(defaultSettings);
-    setAnalysis(initialAnalysis);
-    setStatusMessage('工作区已重置。');
+    setAnalysis(getInitialAnalysis(t));
+    setStatusMessage(t('workspace.sidebar.resetDone'));
   };
 
   if (isLoading) {
@@ -1291,7 +1357,7 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
       <main className="bg-muted/20 flex min-h-dvh items-center justify-center">
         <div className="text-muted-foreground flex items-center gap-3 text-sm">
           <Loader2 className="size-5 animate-spin" />
-          正在加载项目...
+          {t('workspace.loading')}
         </div>
       </main>
     );
@@ -1329,7 +1395,7 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                   >
                     <Link href="/studytrace">
                       <ArrowLeft className="size-3.5" />
-                      我的项目
+                      {t('workspace.backToProjects')}
                     </Link>
                   </Button>
                 ) : null}
@@ -1349,7 +1415,7 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                     ) : (
                       <CloudOff className="size-3" />
                     )}
-                    {cloudMode ? syncLabel : '本地草稿'}
+                    {cloudMode ? syncLabel : t('workspace.localDraft')}
                   </Badge>
                 ) : null}
               </div>
@@ -1357,20 +1423,22 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                 <h1 className="text-2xl font-semibold tracking-normal md:text-4xl">
                   {assignmentTitle
                     ? assignmentTitle
-                    : '写作过程证据工作台'}
+                    : t('workspace.defaultTitle')}
                 </h1>
                 <p className="text-muted-foreground text-sm leading-6 md:text-base">
-                  把草稿、引用来源、反馈、AI
-                  使用记录和时间线整理成一份可复核的申诉材料。
+                  {t('workspace.subtitle')}
                 </p>
               </div>
             </div>
 
             <div className="bg-card grid grid-cols-3 gap-2 rounded-md border p-2 text-center shadow-sm md:min-w-[360px]">
-              <Metric label="证据卡" value={cards.length} />
-              <Metric label="时间节点" value={timeline.length} />
+              <Metric label={t('workspace.metricCards')} value={cards.length} />
               <Metric
-                label="可信评分"
+                label={t('workspace.metricEvents')}
+                value={timeline.length}
+              />
+              <Metric
+                label={t('workspace.metricScore')}
                 value={analysis.trustScore}
                 suffix="/100"
               />
@@ -1385,44 +1453,45 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <ClipboardCheck className="size-5" />
-                基本信息
+                {t('workspace.basic.title')}
               </CardTitle>
-              <CardDescription>
-                这些字段会进入最终报告，用来解释申诉背景和政策边界。
-              </CardDescription>
+              <CardDescription>{t('workspace.basic.desc')}</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
-              <Field label="作业标题">
+              <Field label={t('workspace.basic.assignment')}>
                 <Input
                   value={assignmentTitle}
                   onChange={(event) => setAssignmentTitle(event.target.value)}
-                  placeholder="例如：Research Essay Final Draft"
+                  placeholder={t('workspace.basic.assignmentPlaceholder')}
                 />
               </Field>
-              <Field label="课程名称">
+              <Field label={t('workspace.basic.course')}>
                 <Input
                   value={courseName}
                   onChange={(event) => setCourseName(event.target.value)}
-                  placeholder="例如：Academic Writing 101"
+                  placeholder={t('workspace.basic.coursePlaceholder')}
                 />
               </Field>
-              <Field label="被质疑的问题">
+              <Field label={t('workspace.basic.concern')}>
                 <Textarea
                   value={concern}
                   onChange={(event) => setConcern(event.target.value)}
-                  placeholder="例如：AI 检测显示高风险，但我有完整草稿和引用过程。"
+                  placeholder={t('workspace.basic.concernPlaceholder')}
                   className="min-h-24"
                 />
               </Field>
-              <Field label="课程/学校 AI 政策">
+              <Field label={t('workspace.basic.policy')}>
                 <Textarea
                   value={institutionPolicy}
                   onChange={(event) => setInstitutionPolicy(event.target.value)}
-                  placeholder="粘贴老师或学校对 AI 使用、引用、申诉流程的要求。"
+                  placeholder={t('workspace.basic.policyPlaceholder')}
                   className="min-h-24"
                 />
               </Field>
-              <Field label="AI 使用边界说明" className="md:col-span-2">
+              <Field
+                label={t('workspace.basic.aiBoundary')}
+                className="md:col-span-2"
+              >
                 <Textarea
                   value={aiBoundary}
                   onChange={(event) => setAiBoundary(event.target.value)}
@@ -1436,23 +1505,25 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <ShieldCheck className="size-5" />
-                隐私与 AI 分析提示
+                {t('workspace.privacy.title')}
               </CardTitle>
               <CardDescription className="leading-6">
-                文本类文件只在当前浏览器会话中读取预览；本地保存时不会持久化完整提取文本。
-                点击“生成风险解释”后，证据摘要、时间线和必要文本片段会发送到配置的
-                StudyTrace AI 服务用于分析。导出或提交前请移除无关个人信息。
+                {t('workspace.privacy.desc')}
               </CardDescription>
             </CardHeader>
           </Card>
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="studytrace-no-print grid h-auto w-full grid-cols-2 gap-1 md:grid-cols-5">
-              <TabsTrigger value="upload">上传</TabsTrigger>
-              <TabsTrigger value="cards">证据卡</TabsTrigger>
-              <TabsTrigger value="timeline">时间线</TabsTrigger>
-              <TabsTrigger value="risk">风险解释</TabsTrigger>
-              <TabsTrigger value="report">导出</TabsTrigger>
+              <TabsTrigger value="upload">{t('workspace.tabs.upload')}</TabsTrigger>
+              <TabsTrigger value="cards">{t('workspace.tabs.cards')}</TabsTrigger>
+              <TabsTrigger value="timeline">
+                {t('workspace.tabs.timeline')}
+              </TabsTrigger>
+              <TabsTrigger value="risk">{t('workspace.tabs.risk')}</TabsTrigger>
+              <TabsTrigger value="report">
+                {t('workspace.tabs.report')}
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="upload" className="mt-4 space-y-4">
@@ -1460,11 +1531,10 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <UploadCloud className="size-5" />
-                    上传材料
+                    {t('workspace.upload.title')}
                   </CardTitle>
                   <CardDescription>
-                    支持任意格式。文本、PDF、DOCX
-                    会在浏览器本地提取文字用于分析；图片、压缩包等会保留元数据用于证据组织。原始文件不会上传，仅保存提取的文字。
+                    {t('workspace.upload.desc')}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -1476,11 +1546,11 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                       <Files className="text-primary size-8" />
                     </div>
                     <div className="space-y-1">
-                      <div className="font-medium">选择或拖入写作材料</div>
+                      <div className="font-medium">
+                        {t('workspace.upload.dropTitle')}
+                      </div>
                       <p className="text-muted-foreground max-w-xl text-sm leading-6">
-                        草稿、最终稿、参考文献、阅读笔记、Google Docs
-                        导出、ChatGPT
-                        对话截图、老师反馈、版本历史和提交回执都可以。
+                        {t('workspace.upload.dropDesc')}
                       </p>
                     </div>
                     <input
@@ -1511,14 +1581,24 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                                 {file.name}
                               </span>
                               <Badge variant="outline">
-                                {evidenceKindLabels[file.category]}
+                                {t(`evidenceKinds.${file.category}`)}
                               </Badge>
                             </div>
                             <p className="text-muted-foreground text-sm">
                               {formatFileSize(file.size)} ·{' '}
-                              {file.type || 'unknown'} · 最后修改：
+                              {file.type || 'unknown'} ·{' '}
+                              {t('workspace.upload.lastModified')}{' '}
                               {file.lastModifiedLabel}
                             </p>
+                            {file.checksum ? (
+                              <p
+                                className="text-muted-foreground font-mono text-xs break-all"
+                                title={file.checksum}
+                              >
+                                {t('workspace.upload.fingerprint')}{' '}
+                                {shortChecksum(file.checksum)}
+                              </p>
+                            ) : null}
                             {file.extractedText ? (
                               <p className="text-muted-foreground line-clamp-2 text-sm">
                                 {file.extractedText
@@ -1530,7 +1610,7 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                           <Button
                             variant="ghost"
                             size="icon"
-                            aria-label="删除文件"
+                            aria-label={t('workspace.upload.deleteAria')}
                             onClick={() =>
                               setFiles((prev) =>
                                 prev.filter((item) => item.id !== file.id)
@@ -1542,7 +1622,7 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                         </div>
                       ))
                     ) : (
-                      <EmptyLine text="还没有上传材料。" />
+                      <EmptyLine text={t('workspace.upload.empty')} />
                     )}
                   </div>
                 </CardContent>
@@ -1554,16 +1634,13 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <FileText className="size-5" />
-                    证据卡
+                    {t('workspace.cards.title')}
                   </CardTitle>
-                  <CardDescription>
-                    每张卡都应该回答一个问题：它如何证明真实写作过程、来源可信或
-                    AI 使用边界清楚。
-                  </CardDescription>
+                  <CardDescription>{t('workspace.cards.desc')}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="bg-muted/20 grid gap-3 rounded-lg border p-4 md:grid-cols-[1fr_180px]">
-                    <Field label="证据标题">
+                    <Field label={t('workspace.cards.formTitle')}>
                       <Input
                         value={manualCard.title}
                         onChange={(event) =>
@@ -1572,10 +1649,10 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                             title: event.target.value,
                           }))
                         }
-                        placeholder="例如：第一版提纲截图"
+                        placeholder={t('workspace.cards.formTitlePlaceholder')}
                       />
                     </Field>
-                    <Field label="类型">
+                    <Field label={t('workspace.cards.formKind')}>
                       <select
                         value={manualCard.kind}
                         onChange={(event) =>
@@ -1586,16 +1663,17 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                         }
                         className="border-input bg-background h-9 rounded-md border px-3 text-sm"
                       >
-                        {Object.entries(evidenceKindLabels).map(
-                          ([value, label]) => (
-                            <option key={value} value={value}>
-                              {label}
-                            </option>
-                          )
-                        )}
+                        {evidenceKindKeys.map((value) => (
+                          <option key={value} value={value}>
+                            {t(`evidenceKinds.${value}`)}
+                          </option>
+                        ))}
                       </select>
                     </Field>
-                    <Field label="摘要" className="md:col-span-2">
+                    <Field
+                      label={t('workspace.cards.formSummary')}
+                      className="md:col-span-2"
+                    >
                       <Textarea
                         value={manualCard.summary}
                         onChange={(event) =>
@@ -1604,10 +1682,13 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                             summary: event.target.value,
                           }))
                         }
-                        placeholder="说明这份证据是什么、来自哪里、与作业哪一部分相关。"
+                        placeholder={t('workspace.cards.formSummaryPlaceholder')}
                       />
                     </Field>
-                    <Field label="申诉说明" className="md:col-span-2">
+                    <Field
+                      label={t('workspace.cards.formNotes')}
+                      className="md:col-span-2"
+                    >
                       <Textarea
                         value={manualCard.notes}
                         onChange={(event) =>
@@ -1616,13 +1697,13 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                             notes: event.target.value,
                           }))
                         }
-                        placeholder="写成可以直接放进报告的语句。"
+                        placeholder={t('workspace.cards.formNotesPlaceholder')}
                       />
                     </Field>
                     <div className="md:col-span-2">
                       <Button onClick={addManualCard}>
                         <Plus className="size-4" />
-                        添加证据卡
+                        {t('workspace.cards.add')}
                       </Button>
                     </div>
                   </div>
@@ -1638,7 +1719,7 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                             <div className="min-w-0 space-y-2">
                               <div className="flex flex-wrap items-center gap-2">
                                 <Badge variant="outline">
-                                  {evidenceKindLabels[card.kind]}
+                                  {t(`evidenceKinds.${card.kind}`)}
                                 </Badge>
                                 <StrengthBadge strength={card.strength} />
                                 <span className="font-medium break-words">
@@ -1646,20 +1727,22 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                                 </span>
                               </div>
                               <p className="text-muted-foreground text-sm">
-                                来源：{card.source}
+                                {t('workspace.cards.sourceLabel', {
+                                  source: card.source,
+                                })}
                               </p>
                             </div>
                             <Button
                               variant="ghost"
                               size="icon"
-                              aria-label="删除证据卡"
+                              aria-label={t('workspace.cards.deleteAria')}
                               onClick={() => deleteCard(card.id)}
                             >
                               <Trash2 className="size-4" />
                             </Button>
                           </div>
                           <div className="mt-4 grid gap-3 md:grid-cols-2">
-                            <Field label="摘要">
+                            <Field label={t('workspace.cards.formSummary')}>
                               <Textarea
                                 value={card.summary}
                                 onChange={(event) =>
@@ -1669,7 +1752,7 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                                 }
                               />
                             </Field>
-                            <Field label="申诉说明">
+                            <Field label={t('workspace.cards.formNotes')}>
                               <Textarea
                                 value={card.notes}
                                 onChange={(event) =>
@@ -1683,7 +1766,7 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                         </div>
                       ))
                     ) : (
-                      <EmptyLine text="上传文件后会自动生成证据卡，也可以手动添加。" />
+                      <EmptyLine text={t('workspace.cards.empty')} />
                     )}
                   </div>
                 </CardContent>
@@ -1695,15 +1778,15 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Clock3 className="size-5" />
-                    写作时间线
+                    {t('workspace.timeline.title')}
                   </CardTitle>
                   <CardDescription>
-                    用时间线呈现“逐步完成”的证据链，而不是只展示最终稿。
+                    {t('workspace.timeline.desc')}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="bg-muted/20 grid gap-3 rounded-lg border p-4 md:grid-cols-[220px_1fr]">
-                    <Field label="时间">
+                    <Field label={t('workspace.timeline.time')}>
                       <Input
                         type="datetime-local"
                         value={manualEvent.date}
@@ -1715,7 +1798,7 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                         }
                       />
                     </Field>
-                    <Field label="节点标题">
+                    <Field label={t('workspace.timeline.label')}>
                       <Input
                         value={manualEvent.label}
                         onChange={(event) =>
@@ -1724,10 +1807,13 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                             label: event.target.value,
                           }))
                         }
-                        placeholder="例如：完成第一版提纲"
+                        placeholder={t('workspace.timeline.labelPlaceholder')}
                       />
                     </Field>
-                    <Field label="细节" className="md:col-span-2">
+                    <Field
+                      label={t('workspace.timeline.detail')}
+                      className="md:col-span-2"
+                    >
                       <Textarea
                         value={manualEvent.detail}
                         onChange={(event) =>
@@ -1736,13 +1822,13 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                             detail: event.target.value,
                           }))
                         }
-                        placeholder="说明该节点对应哪些材料、如何证明写作过程。"
+                        placeholder={t('workspace.timeline.detailPlaceholder')}
                       />
                     </Field>
                     <div className="md:col-span-2">
                       <Button onClick={addManualEvent}>
                         <Plus className="size-4" />
-                        添加节点
+                        {t('workspace.timeline.add')}
                       </Button>
                     </div>
                   </div>
@@ -1765,7 +1851,7 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                             <p className="text-muted-foreground text-sm">
                               {event.date
                                 ? formatDateLabel(event.date)
-                                : '未填写时间'}{' '}
+                                : t('date.empty')}{' '}
                               · {event.source}
                             </p>
                             <p className="text-sm leading-6">{event.detail}</p>
@@ -1773,7 +1859,7 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                           <Button
                             variant="ghost"
                             size="icon"
-                            aria-label="删除时间线节点"
+                            aria-label={t('workspace.timeline.deleteAria')}
                             onClick={() => deleteTimelineEvent(event.id)}
                           >
                             <Trash2 className="size-4" />
@@ -1781,7 +1867,7 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                         </div>
                       ))
                     ) : (
-                      <EmptyLine text="上传材料或手动添加节点后，会在这里形成写作时间线。" />
+                      <EmptyLine text={t('workspace.timeline.empty')} />
                     )}
                   </div>
                 </CardContent>
@@ -1793,11 +1879,9 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <BrainCircuit className="size-5" />
-                    风险解释
+                    {t('workspace.risk.title')}
                   </CardTitle>
-                  <CardDescription>
-                    分析的目标不是绕过检测器，而是说明材料可信度、缺口和可复核路径。
-                  </CardDescription>
+                  <CardDescription>{t('workspace.risk.desc')}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid gap-3 md:grid-cols-3">
@@ -1805,7 +1889,7 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                     <div className="bg-background rounded-lg border p-4 md:col-span-2">
                       <div className="mb-2 flex items-center gap-2 font-medium">
                         <Sparkles className="text-primary size-4" />
-                        综合说明
+                        {t('workspace.risk.summary')}
                       </div>
                       <p className="text-muted-foreground text-sm leading-6">
                         {analysis.summary || localAnalysis.summary}
@@ -1814,17 +1898,17 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                   </div>
 
                   <InsightList
-                    title="主要风险"
+                    title={t('workspace.risk.mainRisks')}
                     icon={<AlertTriangle className="size-4" />}
                     items={analysis.riskItems}
                   />
                   <InsightList
-                    title="时间线发现"
+                    title={t('workspace.risk.timelineFindings')}
                     icon={<Clock3 className="size-4" />}
                     items={analysis.timelineFindings}
                   />
                   <InsightList
-                    title="需要补充"
+                    title={t('workspace.risk.gaps')}
                     icon={<Plus className="size-4" />}
                     items={analysis.evidenceGaps}
                   />
@@ -1836,17 +1920,17 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                       ) : (
                         <BrainCircuit className="size-4" />
                       )}
-                      重新分析
+                      {t('workspace.risk.reanalyze')}
                     </Button>
                     <Button
                       variant="outline"
                       onClick={() => {
                         setAnalysis(localAnalysis);
-                        setStatusMessage('已刷新本地分析。');
+                        setStatusMessage(t('workspace.risk.localRefreshed'));
                       }}
                     >
                       <SlidersHorizontal className="size-4" />
-                      本地评估
+                      {t('workspace.risk.localEval')}
                     </Button>
                   </div>
                 </CardContent>
@@ -1858,10 +1942,10 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Download className="size-5" />
-                    报告导出
+                    {t('workspace.report.title')}
                   </CardTitle>
                   <CardDescription>
-                    导出 Markdown 可继续编辑；导出 PDF 可直接提交；登录后可保存到云端历史。
+                    {t('workspace.report.desc')}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -1872,7 +1956,7 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                       ) : (
                         <BrainCircuit className="size-4" />
                       )}
-                      生成分析
+                      {t('workspace.report.generate')}
                     </Button>
                     <Button
                       variant="outline"
@@ -1884,15 +1968,15 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                       ) : (
                         <FileDown className="size-4" />
                       )}
-                      导出 PDF
+                      {t('workspace.report.exportPdf')}
                     </Button>
                     <Button variant="outline" onClick={downloadReport}>
                       <Download className="size-4" />
-                      导出 Markdown
+                      {t('workspace.report.exportMarkdown')}
                     </Button>
                     <Button variant="outline" onClick={printReport}>
                       <Printer className="size-4" />
-                      打印
+                      {t('workspace.report.print')}
                     </Button>
                     {projectId ? (
                       <Button
@@ -1905,12 +1989,12 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                         ) : (
                           <Save className="size-4" />
                         )}
-                        保存到云端
+                        {t('workspace.report.saveCloud')}
                       </Button>
                     ) : null}
                     <Button variant="ghost" onClick={copyReport}>
                       <ClipboardCheck className="size-4" />
-                      复制
+                      {t('workspace.report.copy')}
                     </Button>
                   </div>
 
@@ -1921,15 +2005,17 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                     <div className="mb-4 flex flex-col gap-2 border-b pb-4 md:flex-row md:items-start md:justify-between">
                       <div>
                         <h2 className="text-xl font-semibold">
-                          写作过程与 AI 使用边界说明
+                          {t('workspace.report.cardHeading')}
                         </h2>
                         <p className="text-muted-foreground text-sm">
-                          {assignmentTitle || '未填写作业标题'} ·{' '}
-                          {courseName || '未填写课程'}
+                          {assignmentTitle || t('workspace.report.noAssignment')}{' '}
+                          · {courseName || t('workspace.report.noCourse')}
                         </p>
                       </div>
                       <Badge variant="outline">
-                        评分 {analysis.trustScore}/100
+                        {t('workspace.report.scoreBadge', {
+                          score: analysis.trustScore,
+                        })}
                       </Badge>
                     </div>
                     <pre className="text-foreground p-0 text-sm leading-7 break-words whitespace-pre-wrap">
@@ -1941,7 +2027,7 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                     <div className="studytrace-no-print space-y-3">
                       <div className="flex items-center gap-2 text-sm font-medium">
                         <History className="size-4" />
-                        报告历史
+                        {t('workspace.report.history')}
                         {reportHistory.length ? (
                           <span className="text-muted-foreground font-normal">
                             （{reportHistory.length}）
@@ -1957,7 +2043,7 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                             >
                               <div className="min-w-0">
                                 <div className="truncate text-sm font-medium">
-                                  {item.title || '未命名报告'}
+                                  {item.title || t('workspace.report.unnamedReport')}
                                 </div>
                                 <div className="text-muted-foreground text-xs">
                                   {formatDateLabel(item.createdAt)} ·{' '}
@@ -1971,14 +2057,14 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                                   onClick={() => downloadSavedReport(item)}
                                 >
                                   <Download className="size-4" />
-                                  下载
+                                  {t('workspace.report.download')}
                                 </Button>
                               </div>
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <EmptyLine text="还没有保存的报告版本。点击“保存到云端”会创建一个历史版本。" />
+                        <EmptyLine text={t('workspace.report.historyEmpty')} />
                       )}
                     </div>
                   ) : null}
@@ -1993,7 +2079,7 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <ShieldCheck className="size-4" />
-                完整度
+                {t('workspace.sidebar.coverage')}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -2020,7 +2106,7 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                 ) : (
                   <BrainCircuit className="size-4" />
                 )}
-                生成风险解释
+                {t('workspace.sidebar.generate')}
               </Button>
               {statusMessage ? (
                 <p className="text-muted-foreground text-sm leading-6">
@@ -2034,14 +2120,14 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <SlidersHorizontal className="size-4" />
-                配置项
+                {t('workspace.sidebar.settingsTitle')}
               </CardTitle>
               <CardDescription>
-                参考同类产品的常见配置，先做成前端工作流参数。
+                {t('workspace.sidebar.settingsDesc')}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Field label="证据标准">
+              <Field label={t('workspace.sidebar.evidenceStandard')}>
                 <select
                   value={settings.evidenceStandard}
                   onChange={(event) =>
@@ -2053,11 +2139,19 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                   }
                   className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
                 >
-                  <option value="balanced">均衡</option>
-                  <option value="strict">严格</option>
+                  <option value="balanced">
+                    {t('workspace.sidebar.standardBalanced')}
+                  </option>
+                  <option value="strict">
+                    {t('workspace.sidebar.standardStrict')}
+                  </option>
                 </select>
               </Field>
-              <Field label={`风险敏感度：${settings.riskSensitivity}`}>
+              <Field
+                label={t('workspace.sidebar.riskSensitivity', {
+                  value: settings.riskSensitivity,
+                })}
+              >
                 <input
                   type="range"
                   min="0"
@@ -2072,7 +2166,7 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                   className="accent-primary w-full"
                 />
               </Field>
-              <Field label="AI 政策模式">
+              <Field label={t('workspace.sidebar.aiPolicy')}>
                 <select
                   value={settings.aiPolicy}
                   onChange={(event) =>
@@ -2084,10 +2178,14 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                   }
                   className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
                 >
-                  <option value="none">不允许 AI</option>
-                  <option value="assistive-only">仅允许辅助</option>
+                  <option value="none">
+                    {t('workspace.sidebar.policyNone')}
+                  </option>
+                  <option value="assistive-only">
+                    {t('workspace.sidebar.policyAssistive')}
+                  </option>
                   <option value="drafting-with-disclosure">
-                    允许披露后使用
+                    {t('workspace.sidebar.policyDisclosure')}
                   </option>
                 </select>
               </Field>
@@ -2103,7 +2201,7 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                   }
                   className="mt-1"
                 />
-                报告中说明 AI 检测器可能存在误判，要求人工复核。
+                {t('workspace.sidebar.detectorCaveat')}
               </label>
               <label className="flex items-start gap-2 text-sm">
                 <input
@@ -2117,7 +2215,7 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
                   }
                   className="mt-1"
                 />
-                强制检查引用来源与阅读证据。
+                {t('workspace.sidebar.citationAudit')}
               </label>
             </CardContent>
           </Card>
@@ -2126,11 +2224,17 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <LinkIcon className="size-4" />
-                产品参考
+                {t('workspace.sidebar.referencesTitle')}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {marketSignals.map((signal) => (
+              {(
+                t.raw('marketSignals') as {
+                  name: string;
+                  source: string;
+                  detail: string;
+                }[]
+              ).map((signal) => (
                 <div key={signal.name} className="rounded-md border p-3">
                   <div className="font-medium">{signal.name}</div>
                   <div className="text-muted-foreground mt-1 text-xs">
@@ -2146,7 +2250,7 @@ ${analysis.exportChecklist.map((item) => `- ${item}`).join('\n')}
 
           <Button variant="ghost" className="w-full" onClick={resetWorkspace}>
             <Trash2 className="size-4" />
-            清空工作区
+            {t('workspace.sidebar.reset')}
           </Button>
         </aside>
       </section>
@@ -2192,12 +2296,8 @@ function Metric({
 }
 
 function StrengthBadge({ strength }: { strength: EvidenceStrength }) {
-  const label =
-    strength === 'strong'
-      ? '强证据'
-      : strength === 'medium'
-        ? '中证据'
-        : '弱证据';
+  const t = useTranslations('studytrace');
+  const label = t(`strength.${strength}`);
   return (
     <Badge
       variant={strength === 'strong' ? 'default' : 'outline'}
@@ -2209,6 +2309,7 @@ function StrengthBadge({ strength }: { strength: EvidenceStrength }) {
 }
 
 function ScorePanel({ score }: { score: number }) {
+  const t = useTranslations('studytrace');
   const tone =
     score >= 75
       ? 'text-green-600'
@@ -2219,10 +2320,12 @@ function ScorePanel({ score }: { score: number }) {
     <div className="bg-background rounded-lg border p-4">
       <div className="mb-2 flex items-center gap-2 font-medium">
         <ShieldCheck className="text-primary size-4" />
-        可信材料评分
+        {t('scorePanel.title')}
       </div>
       <div className={cn('text-4xl font-semibold', tone)}>{score}</div>
-      <div className="text-muted-foreground mt-2 text-sm">满分 100</div>
+      <div className="text-muted-foreground mt-2 text-sm">
+        {t('scorePanel.outOf')}
+      </div>
     </div>
   );
 }

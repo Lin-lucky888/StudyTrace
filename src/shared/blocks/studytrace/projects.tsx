@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useLocale, useTranslations } from 'next-intl';
 import {
   ArrowRight,
   FileText,
@@ -39,11 +40,11 @@ type ProjectSummary = {
   cardCount: number;
 };
 
-function formatDate(value: string | null) {
+function formatDate(value: string | null, locale: string) {
   if (!value) return '—';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '—';
-  return new Intl.DateTimeFormat('zh-CN', {
+  return new Intl.DateTimeFormat(locale === 'zh' ? 'zh-CN' : 'en', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -60,6 +61,8 @@ function scoreTone(score: number) {
 
 export function StudyTraceProjects() {
   const router = useRouter();
+  const t = useTranslations('studytrace');
+  const locale = useLocale();
   const [isLoading, setIsLoading] = useState(true);
   const [authed, setAuthed] = useState(false);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
@@ -114,7 +117,7 @@ export function StudyTraceProjects() {
   const deleteProject = async (id: string) => {
     if (
       typeof window !== 'undefined' &&
-      !window.confirm('确定删除这个项目？删除后无法恢复。')
+      !window.confirm(t('projects.deleteConfirm'))
     ) {
       return;
     }
@@ -141,7 +144,7 @@ export function StudyTraceProjects() {
       <main className="bg-muted/20 flex min-h-dvh items-center justify-center">
         <div className="text-muted-foreground flex items-center gap-3 text-sm">
           <Loader2 className="size-5 animate-spin" />
-          正在加载...
+          {t('projects.loading')}
         </div>
       </main>
     );
@@ -157,17 +160,17 @@ export function StudyTraceProjects() {
               <ShieldCheck className="text-primary mt-0.5 size-5 shrink-0" />
               <div className="space-y-1">
                 <p className="text-sm font-medium">
-                  当前为本地草稿模式，材料只保存在本浏览器。
+                  {t('projects.guestTitle')}
                 </p>
                 <p className="text-muted-foreground text-sm">
-                  登录后可创建多个云端项目，跨设备保存证据、时间线与申诉报告。
+                  {t('projects.guestDesc')}
                 </p>
               </div>
             </div>
             <Button asChild className="shrink-0">
               <Link href="/sign-in">
                 <LogIn className="size-4" />
-                登录以云端保存
+                {t('projects.guestSignIn')}
               </Link>
             </Button>
           </div>
@@ -184,14 +187,14 @@ export function StudyTraceProjects() {
           <div className="max-w-3xl space-y-3">
             <Badge variant="outline" className="gap-2">
               <ShieldCheck className="size-3.5" />
-              StudyTrace
+              {t('common.badge')}
             </Badge>
             <div className="space-y-2">
               <h1 className="text-2xl font-semibold tracking-normal md:text-4xl">
-                我的项目
+                {t('projects.title')}
               </h1>
               <p className="text-muted-foreground text-sm leading-6 md:text-base">
-                每个项目对应一份作业的写作过程证据、时间线和申诉报告。
+                {t('projects.subtitle')}
               </p>
             </div>
           </div>
@@ -201,7 +204,7 @@ export function StudyTraceProjects() {
             ) : (
               <Plus className="size-4" />
             )}
-            新建项目
+            {t('projects.newProject')}
           </Button>
         </div>
       </section>
@@ -217,7 +220,7 @@ export function StudyTraceProjects() {
                 <CardHeader className="space-y-2">
                   <div className="flex items-start justify-between gap-2">
                     <CardTitle className="line-clamp-2 text-base">
-                      {project.title || '未命名项目'}
+                      {project.title || t('projects.unnamed')}
                     </CardTitle>
                     <span
                       className={cn(
@@ -232,34 +235,36 @@ export function StudyTraceProjects() {
                     </span>
                   </div>
                   <CardDescription className="line-clamp-1">
-                    {project.courseName || '未填写课程'}
+                    {project.courseName || t('projects.noCourse')}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="mt-auto space-y-3">
                   <div className="text-muted-foreground flex flex-wrap gap-3 text-xs">
                     <span className="flex items-center gap-1">
                       <FileText className="size-3.5" />
-                      {project.fileCount} 文件
+                      {t('projects.fileCount', { count: project.fileCount })}
                     </span>
                     <span className="flex items-center gap-1">
                       <Sparkles className="size-3.5" />
-                      {project.cardCount} 证据卡
+                      {t('projects.cardCount', { count: project.cardCount })}
                     </span>
                   </div>
                   <p className="text-muted-foreground text-xs">
-                    更新于 {formatDate(project.updatedAt)}
+                    {t('projects.updatedAt', {
+                      date: formatDate(project.updatedAt, locale),
+                    })}
                   </p>
                   <div className="flex items-center justify-between gap-2">
                     <Button asChild size="sm" variant="secondary">
                       <Link href={`/studytrace/${project.id}`}>
-                        打开
+                        {t('projects.open')}
                         <ArrowRight className="size-4" />
                       </Link>
                     </Button>
                     <Button
                       size="icon"
                       variant="ghost"
-                      aria-label="删除项目"
+                      aria-label={t('projects.deleteAria')}
                       disabled={deletingId === project.id}
                       onClick={() => deleteProject(project.id)}
                     >
@@ -280,9 +285,9 @@ export function StudyTraceProjects() {
               <FileText className="text-primary size-8" />
             </div>
             <div className="space-y-1">
-              <p className="font-medium">还没有项目</p>
+              <p className="font-medium">{t('projects.emptyTitle')}</p>
               <p className="text-muted-foreground text-sm">
-                新建一个项目，开始整理写作过程证据与申诉材料。
+                {t('projects.emptyDesc')}
               </p>
             </div>
             <Button onClick={createProject} disabled={isCreating}>
@@ -291,7 +296,7 @@ export function StudyTraceProjects() {
               ) : (
                 <Plus className="size-4" />
               )}
-              新建项目
+              {t('projects.newProject')}
             </Button>
           </div>
         )}

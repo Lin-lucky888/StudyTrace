@@ -1,0 +1,313 @@
+{
+  "common": {
+    "badge": "StudyTrace",
+    "scoreSuffix": "/100"
+  },
+  "evidenceKinds": {
+    "draft": "Draft",
+    "source": "Citation source",
+    "ai-disclosure": "AI use boundary",
+    "feedback": "Feedback & comments",
+    "version": "Version history",
+    "process": "Writing process",
+    "other": "Other material"
+  },
+  "strength": {
+    "strong": "Strong evidence",
+    "medium": "Medium evidence",
+    "weak": "Weak evidence"
+  },
+  "date": {
+    "unknown": "Unrecognized time",
+    "empty": "No time entered"
+  },
+  "projects": {
+    "loading": "Loading...",
+    "guestTitle": "Local draft mode. Materials are stored only in this browser.",
+    "guestDesc": "Sign in to create multiple cloud projects and keep evidence, timelines, and appeal reports synced across devices.",
+    "guestSignIn": "Sign in to save to cloud",
+    "title": "My projects",
+    "subtitle": "Each project holds the writing-process evidence, timeline, and appeal report for one assignment.",
+    "newProject": "New project",
+    "unnamed": "Untitled project",
+    "noCourse": "No course entered",
+    "fileCount": "{count} files",
+    "cardCount": "{count} cards",
+    "updatedAt": "Updated {date}",
+    "open": "Open",
+    "deleteAria": "Delete project",
+    "deleteConfirm": "Delete this project? This cannot be undone.",
+    "emptyTitle": "No projects yet",
+    "emptyDesc": "Create a project to start organizing writing-process evidence and appeal materials."
+  },
+  "workspace": {
+    "loading": "Loading project...",
+    "backToProjects": "My projects",
+    "syncSaving": "Syncing...",
+    "syncSaved": "Saved to cloud",
+    "localDraft": "Local draft",
+    "defaultTitle": "Writing-process evidence workbench",
+    "subtitle": "Organize drafts, citation sources, feedback, AI-use records, and a timeline into a reviewable appeal package.",
+    "metricCards": "Evidence cards",
+    "metricEvents": "Time nodes",
+    "metricScore": "Trust score",
+    "hydrate": {
+      "guest": "Not signed in. You are in local draft mode; sign in to sync to the cloud.",
+      "loadFailed": "Failed to load the cloud project; switched to local draft mode.",
+      "connectFailed": "Cloud connection failed; switched to local draft mode."
+    },
+    "localCacheReduced": "Local browser draft space is low; only basic information and the file list were saved.",
+    "localCachePaused": "Local browser draft space is low; local autosave has been paused.",
+    "basic": {
+      "title": "Basic information",
+      "desc": "These fields go into the final report to explain the appeal context and policy boundaries.",
+      "assignment": "Assignment title",
+      "assignmentPlaceholder": "e.g. Research Essay Final Draft",
+      "course": "Course name",
+      "coursePlaceholder": "e.g. Academic Writing 101",
+      "concern": "Concern raised",
+      "concernPlaceholder": "e.g. AI detection flagged high risk, but I have complete drafts and a citation process.",
+      "policy": "Course / school AI policy",
+      "policyPlaceholder": "Paste your teacher's or school's requirements on AI use, citation, and the appeal process.",
+      "aiBoundary": "AI use boundary statement"
+    },
+    "privacy": {
+      "title": "Privacy & AI analysis notice",
+      "desc": "Text files are read for preview only in the current browser session; the full extracted text is not persisted in local storage. After you click \"Generate risk explanation\", evidence summaries, the timeline, and necessary text snippets are sent to the configured StudyTrace AI service for analysis. Remove unrelated personal information before exporting or submitting."
+    },
+    "tabs": {
+      "upload": "Upload",
+      "cards": "Evidence cards",
+      "timeline": "Timeline",
+      "risk": "Risk explanation",
+      "report": "Export"
+    },
+    "upload": {
+      "title": "Upload materials",
+      "desc": "Any format is supported. Text, PDF, and DOCX are extracted locally in the browser for analysis; images, archives, etc. keep their metadata for evidence organization. Original files are never uploaded; only the extracted text is saved.",
+      "dropTitle": "Choose or drop writing materials",
+      "dropDesc": "Drafts, final versions, references, reading notes, Google Docs exports, ChatGPT conversation screenshots, teacher feedback, version history, and submission receipts all work.",
+      "empty": "No materials uploaded yet.",
+      "lastModified": "Last modified:",
+      "fingerprint": "SHA-256 fingerprint:",
+      "deleteAria": "Delete file",
+      "status": {
+        "organizing": "Organizing uploaded materials...",
+        "parsingOne": "Parsing: {name}",
+        "parsingMulti": "Parsing file {index}/{total}: {name}",
+        "generated": "Generated {count} evidence cards and timeline nodes."
+      }
+    },
+    "cards": {
+      "title": "Evidence cards",
+      "desc": "Each card should answer one question: how it proves a genuine writing process, a credible source, or a clear AI-use boundary.",
+      "sourceUpload": "Uploaded file",
+      "sourceManual": "Manual entry",
+      "formTitle": "Evidence title",
+      "formTitlePlaceholder": "e.g. Screenshot of the first outline",
+      "formKind": "Type",
+      "formSummary": "Summary",
+      "formSummaryPlaceholder": "Explain what this evidence is, where it came from, and which part of the assignment it relates to.",
+      "formNotes": "Appeal note",
+      "formNotesPlaceholder": "Write it as a sentence you can drop straight into the report.",
+      "add": "Add evidence card",
+      "sourceLabel": "Source: {source}",
+      "deleteAria": "Delete evidence card",
+      "empty": "Evidence cards are generated automatically after upload; you can also add them manually.",
+      "needTitleOrSummary": "Please fill in an evidence title or summary first.",
+      "added": "Evidence card added.",
+      "summaryFromPreview": "{kind}: {preview}",
+      "summaryFromMeta": "{kind}: {ext} file, {size}."
+    },
+    "timeline": {
+      "title": "Writing timeline",
+      "desc": "Use a timeline to show a \"step-by-step\" chain of evidence, not just the final version.",
+      "time": "Time",
+      "label": "Node title",
+      "labelPlaceholder": "e.g. Finished the first outline",
+      "detail": "Detail",
+      "detailPlaceholder": "Explain which materials this node maps to and how it proves the writing process.",
+      "add": "Add node",
+      "deleteAria": "Delete timeline node",
+      "empty": "After you upload materials or add nodes manually, a writing timeline forms here.",
+      "needLabel": "Please enter a timeline node title.",
+      "added": "Timeline node added.",
+      "uploadLabel": "Evidence uploaded: {name}",
+      "uploadDetail": "{kind}, file last modified at {time}.",
+      "sourceTimestamp": "File timestamp"
+    },
+    "risk": {
+      "title": "Risk explanation",
+      "desc": "The goal is not to bypass detectors, but to explain material credibility, gaps, and a reviewable path.",
+      "summary": "Overall summary",
+      "mainRisks": "Main risks",
+      "timelineFindings": "Timeline findings",
+      "gaps": "To supplement",
+      "reanalyze": "Re-analyze",
+      "localEval": "Local evaluation",
+      "localRefreshed": "Local analysis refreshed."
+    },
+    "report": {
+      "title": "Report export",
+      "desc": "Export Markdown to keep editing; export PDF to submit directly; sign in to save to cloud history.",
+      "generate": "Generate analysis",
+      "exportPdf": "Export PDF",
+      "exportMarkdown": "Export Markdown",
+      "print": "Print",
+      "saveCloud": "Save to cloud",
+      "copy": "Copy",
+      "cardHeading": "Writing Process & AI Use Boundary Statement",
+      "noAssignment": "No assignment title",
+      "noCourse": "No course",
+      "scoreBadge": "Score {score}/100",
+      "history": "Report history",
+      "unnamedReport": "Untitled report",
+      "download": "Download",
+      "historyEmpty": "No saved report versions yet. \"Save to cloud\" creates a history version.",
+      "status": {
+        "needProject": "Sign in and open a cloud project to save report history.",
+        "saved": "Report saved to cloud history.",
+        "saveFailed": "Failed to save the report. Please try again later.",
+        "copied": "Report copied to clipboard.",
+        "copyFailed": "Copy failed. Please use the export button.",
+        "pdfGenerating": "Generating PDF...",
+        "pdfDone": "PDF exported.",
+        "pdfFailed": "PDF generation failed. You can print to PDF instead."
+      }
+    },
+    "analysisStatus": {
+      "generating": "Generating risk explanation and appeal structure...",
+      "needMaterials": "Please upload or enter evidence materials first.",
+      "aiDone": "AI analysis complete.",
+      "localDone": "Local analysis generated; sign in or configure the service for an AI version.",
+      "needAuth": "AI analysis requires sign-in; a local version was generated.",
+      "needCredits": "AI analysis requires available credits; a local version was generated.",
+      "unavailable": "AI analysis is unavailable; a local version was generated."
+    },
+    "sidebar": {
+      "coverage": "Completeness",
+      "generate": "Generate risk explanation",
+      "settingsTitle": "Configuration",
+      "settingsDesc": "Common configurations from comparable products, wired first as front-end workflow parameters.",
+      "evidenceStandard": "Evidence standard",
+      "standardBalanced": "Balanced",
+      "standardStrict": "Strict",
+      "riskSensitivity": "Risk sensitivity: {value}",
+      "aiPolicy": "AI policy mode",
+      "policyNone": "AI not allowed",
+      "policyAssistive": "Assistive only",
+      "policyDisclosure": "Allowed with disclosure",
+      "detectorCaveat": "State in the report that AI detectors can misjudge and request human review.",
+      "citationAudit": "Force checking of citation sources and reading evidence.",
+      "referencesTitle": "Product references",
+      "reset": "Clear workspace",
+      "resetDone": "Workspace reset."
+    }
+  },
+  "marketSignals": [
+    {
+      "name": "Writing-process signals",
+      "source": "GPTZero Authorship",
+      "detail": "Focuses on process evidence such as copy-paste, edit duration, number of collaborators, and version changes."
+    },
+    {
+      "name": "Similarity & citation check",
+      "source": "Turnitin Draft Coach",
+      "detail": "Splits similarity, citation formatting, and grammar feedback into independent check dimensions."
+    },
+    {
+      "name": "Explanatory risk signals",
+      "source": "Copyleaks AI Logic",
+      "detail": "Gives not only a risk score but also explains trigger signals, text snippets, and possible sources."
+    },
+    {
+      "name": "Multi-dimension content quality",
+      "source": "Originality.ai",
+      "detail": "AI, plagiarism, facts, readability, and grammar can be combined into report dimensions."
+    }
+  ],
+  "aiBoundaryDefaultInput": "I use AI only to understand the prompt, organize an outline, check grammar, or polish individual sentences; the final ideas, source selection, paragraph organization, and body writing are done by me.",
+  "analysis": {
+    "initial": {
+      "summary": "Upload drafts, references, feedback records, and an AI-use statement first, and the system will organize them into evidence cards, a timeline, and an appeal report draft.",
+      "risk": "Current materials are insufficient to form a credible writing-process chain.",
+      "timeline": "No timeline built yet.",
+      "gap": "Missing draft versions, citation sources, and an AI-use boundary statement.",
+      "appeal": "Generate the appeal statement after adding materials.",
+      "aiBoundary": "Please state whether AI was used for topic selection, outlining, polishing, grammar checking, or organizing materials.",
+      "checklist": [
+        "Upload at least 3 kinds of evidence.",
+        "Fill in course and assignment information."
+      ]
+    },
+    "local": {
+      "riskMissing": "Missing {kinds}, which can make the appeal look one-sided.",
+      "riskCovered": "Core evidence types are covered; next, strengthen how each card maps to the assignment requirements.",
+      "riskFewTimeline": "Few timeline events. Add nodes such as topic selection, research, outline, first draft, revision, and final submission.",
+      "riskTimelineOk": "The timeline can already show a continuous writing process.",
+      "riskBoundaryOk": "The AI-use boundary has a basic statement; continue specifying tools, purposes, and the scope that was not ghost-written.",
+      "riskBoundaryShort": "The AI-use boundary statement is too short and may read as avoiding the key question.",
+      "riskSourceShort": "Citation source evidence is insufficient. Upload references, reading notes, database search screenshots, or saved web pages.",
+      "summaryHigh": "Materials are close to submittable. Focus on timeline consistency, verifiable citation sources, and the wording of the AI-use statement.",
+      "summaryMid": "Materials have initial credibility, but you still need to add key evidence and map each item to the writing process.",
+      "summaryLow": "Materials are still scattered. Build a complete timeline first, then add drafts, sources, and AI-boundary evidence.",
+      "timelineEvents": "Identified {count} timed process nodes.",
+      "timelineNoEvents": "No usable time nodes identified.",
+      "timelineHasDraft": "Draft-type evidence exists and can support a step-by-step writing narrative.",
+      "timelineNoDraft": "No drafts or staged versions, making it harder to prove the text was not generated in one pass.",
+      "timelineHasFeedback": "Feedback or comments exist and can serve as side evidence of human interaction and revision.",
+      "timelineNoFeedback": "You can add teacher, peer, or mentor feedback to strengthen process credibility.",
+      "gapSupplement": "Add {kind}.",
+      "gapWriteAppeal": "Write each card's note as appeal-ready language you can quote directly.",
+      "appealOutline": [
+        "Explain the assignment background, submission time, and the concern raised.",
+        "Explain the writing process along the timeline: topic selection, research, outline, drafts, revisions, and the final version.",
+        "List citation sources and reading/excerpt evidence, and explain which ideas come from external materials.",
+        "Explain the boundary of AI-tool use, distinguishing permitted assistance from ghost-writing that did not happen.",
+        "When requesting review, attach the evidence list and acknowledge citation or disclosure details that could be improved."
+      ],
+      "aiBoundaryStatement": "I used AI only within the permitted scope for grammar checking, structural suggestions, or organizing materials; I did not have AI directly write the final body text. Specific usage records are in the evidence cards.",
+      "exportChecklist": [
+        "Do not claim the detector \"must be wrong\" in the report; emphasize the evidence chain and the request for review.",
+        "Every citation source should be openable or verifiable via screenshots, notes, or bibliographic details.",
+        "The AI-use statement should be specific about the tool, date, purpose, and whether it entered the final version.",
+        "Remove unrelated personal information before exporting; keep only appeal-relevant evidence."
+      ]
+    }
+  },
+  "reportDoc": {
+    "title": "Writing Process & AI Use Boundary Statement",
+    "basicHeading": "Basic information",
+    "assignment": "Assignment",
+    "course": "Course",
+    "concern": "Concern raised",
+    "policy": "Course/School policy",
+    "notFilled": "Not provided",
+    "summaryHeading": "Summary",
+    "trustScore": "Trusted-material score: {score}/100",
+    "aiBoundaryHeading": "AI use boundary",
+    "cardsHeading": "Evidence cards",
+    "credibility": "credibility",
+    "noSummary": "No summary",
+    "notesLabel": "Note",
+    "empty": "Not provided",
+    "noCards": "No evidence cards.",
+    "timelineHeading": "Timeline",
+    "sourceLabel": "Source",
+    "noTimeline": "No timeline.",
+    "fingerprintHeading": "Evidence file fingerprints (SHA-256)",
+    "fingerprintNote": "Fingerprints are computed locally in the browser from the raw file content; original files are not uploaded. Keep your originals; to verify, recompute the SHA-256 of an original and compare it with the fingerprint below.",
+    "fingerprintSha": "SHA-256",
+    "fingerprintUncomputed": "Not computed (unsupported browser environment or empty file)",
+    "fingerprintLastModified": "File last modified",
+    "noFiles": "No uploaded files.",
+    "riskHeading": "Risk explanation",
+    "gapsHeading": "Materials to supplement",
+    "appealHeading": "Appeal statement outline",
+    "checklistHeading": "Pre-export checklist"
+  },
+  "scorePanel": {
+    "title": "Trusted-material score",
+    "outOf": "out of 100"
+  }
+}

@@ -4,6 +4,7 @@ import { Configs, getAllConfigs } from '@/shared/models/config';
 import { consumeCredits, getRemainingCredits } from '@/shared/models/credit';
 import {
   createStudyTraceAnalysisRun,
+  findStudyTraceProject,
   StudyTraceRunStatus,
 } from '@/shared/models/studytrace';
 import { getUserInfo } from '@/shared/models/user';
@@ -22,6 +23,7 @@ type StudyTraceAnalysis = {
 
 type StudyTracePayload = {
   projectId?: string;
+  locale?: string;
   assignment?: {
     title?: string;
     courseName?: string;
@@ -36,6 +38,11 @@ type StudyTracePayload = {
   localAnalysis?: StudyTraceAnalysis;
 };
 
+// English is the default output language; Chinese only when explicitly requested.
+function resolveOutputLanguage(locale?: string) {
+  return locale && locale.toLowerCase().startsWith('zh') ? 'Chinese' : 'English';
+}
+
 type StudyTraceModelConfig = {
   apiKey: string;
   baseUrl: string;
@@ -45,19 +52,24 @@ type StudyTraceModelConfig = {
 
 const DEFAULT_ANALYSIS: StudyTraceAnalysis = {
   trustScore: 35,
-  summary: '材料仍需要补充。请优先建立写作时间线、上传草稿版本和引用来源。',
-  riskItems: ['当前证据不足，难以支撑完整写作过程。'],
-  timelineFindings: ['尚未形成连续时间线。'],
-  evidenceGaps: ['缺少草稿、来源和 AI 使用边界说明。'],
+  summary:
+    'Materials still need work. Build a writing timeline first, and upload draft versions and citation sources.',
+  riskItems: [
+    'Current evidence is insufficient to support a complete writing process.',
+  ],
+  timelineFindings: ['No continuous timeline has formed yet.'],
+  evidenceGaps: [
+    'Missing drafts, citation sources, and an AI-use boundary statement.',
+  ],
   appealOutline: [
-    '说明被质疑的问题。',
-    '按时间线解释写作过程。',
-    '列出引用来源和 AI 使用边界。',
-    '请求人工复核。',
+    'Explain the concern raised.',
+    'Explain the writing process along the timeline.',
+    'List citation sources and the AI-use boundary.',
+    'Request human review.',
   ],
   aiBoundaryStatement:
-    '请说明 AI 是否用于选题、提纲、语法检查、润色或资料整理，以及哪些部分完全由本人完成。',
-  exportChecklist: ['补齐证据后再导出报告。'],
+    'State whether AI was used for topic selection, outlining, grammar checking, polishing, or organizing materials, and which parts were done entirely by you.',
+  exportChecklist: ['Add the missing evidence before exporting the report.'],
   providerStatus: 'local',
 };
 
@@ -134,22 +146,22 @@ function extractJsonObject(text: string) {
   throw new Error('AI response did not include JSON');
 }
 
-function buildSystemPrompt() {
+function buildSystemPrompt(language: string) {
   return [
     'You are StudyTrace, a careful academic integrity evidence organizer.',
     'Your job is to help a student organize truthful writing-process evidence, citation sources, AI-use boundaries, and appeal materials.',
     'Do not help evade detection, fabricate evidence, hide AI usage, or claim certainty about detector errors.',
     'Explain risk in a balanced way and recommend verifiable evidence.',
     'Return strict JSON only with these keys: trustScore, summary, riskItems, timelineFindings, evidenceGaps, appealOutline, aiBoundaryStatement, exportChecklist.',
-    'trustScore must be an integer from 0 to 100. All list fields must be arrays of concise Chinese strings.',
+    `trustScore must be an integer from 0 to 100. All text fields and list items must be concise ${language} strings.`,
   ].join('\n');
 }
 
-function buildUserPrompt(payload: StudyTracePayload) {
+function buildUserPrompt(payload: StudyTracePayload, language: string) {
   return [
-    '请基于以下材料生成中文分析。',
-    '重点：真实写作过程、引用来源、AI 使用边界、申诉证据清单、风险解释。',
-    '要求：不要编造不存在的证据；如果材料不足，请明确指出缺口。',
+    `Generate the analysis in ${language}.`,
+    'Focus on: the genuine writing process, citation sources, AI-use boundary, an appeal evidence checklist, and a balanced risk explanation.',
+    'Requirements: do not fabricate evidence that does not exist; if materials are insufficient, clearly point out the gaps.',
     '',
     JSON.stringify(
       {
@@ -193,6 +205,7 @@ async function callStudyTraceModel(
   config: StudyTraceModelConfig
 ) {
   const { apiKey, baseUrl, model } = config;
+  const language = resolveOutputLanguage(payload.locale);
 
   if (!apiKey) {
     throw new Error('STUDYTRACE_AI_API_KEY is not configured');
@@ -211,11 +224,11 @@ async function callStudyTraceModel(
         messages: [
           {
             role: 'system',
-            content: buildSystemPrompt(),
+            content: buildSystemPrompt(language),
           },
           {
             role: 'user',
-            content: buildUserPrompt(payload),
+            content: buildUserPrompt(payload, language),
           },
         ],
         thinking: {
@@ -261,6 +274,19 @@ export async function POST(req: Request) {
     }
 
     const payload = (await req.json()) as StudyTracePayload;
+
+    // Only attach the run to a project the caller actually owns. Otherwise a
+    // forged projectId could pollute another user's project (trust score /
+    // last-analyzed timestamp are updated by createStudyTraceAnalysisRun).
+    let projectId: string | undefined;
+    if (payload.projectId) {
+      const project = await findStudyTraceProject(payload.projectId, user.id);
+      if (!project) {
+        return respErr('project not found');
+      }
+      projectId = project.id;
+    }
+
     const fallback = normalizeAnalysis(payload.localAnalysis, DEFAULT_ANALYSIS);
     const modelConfig = getStudyTraceModelConfig(configs);
     const costCredits = modelConfig.apiKey
@@ -292,7 +318,7 @@ export async function POST(req: Request) {
             type: 'studytrace-analysis',
             provider: modelConfig.provider,
             model: modelConfig.model,
-            projectId: payload.projectId || '',
+            projectId: projectId || '',
           }),
         });
         creditId = consumedCredit?.id || null;
@@ -302,7 +328,7 @@ export async function POST(req: Request) {
       try {
         const run = await createStudyTraceAnalysisRun({
           userId: user.id,
-          projectId: payload.projectId,
+          projectId,
           provider: modelConfig.provider,
           model: modelConfig.model,
           status: StudyTraceRunStatus.SUCCESS,
@@ -337,7 +363,7 @@ export async function POST(req: Request) {
       try {
         await createStudyTraceAnalysisRun({
           userId: user.id,
-          projectId: payload.projectId,
+          projectId,
           provider: modelConfig.provider,
           model: modelConfig.model,
           status: StudyTraceRunStatus.FAILED,

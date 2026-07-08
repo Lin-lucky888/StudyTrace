@@ -143,6 +143,7 @@ export type SnapshotFile = {
   category: string;
   lastModified: string;
   extractedText?: string;
+  checksum?: string;
 };
 
 export type SnapshotCard = {
@@ -436,6 +437,7 @@ export async function getStudyTraceProjectSnapshot(
       category: row.category,
       lastModified: toIso(row.lastModifiedAt) || '',
       extractedText: row.extractedText || undefined,
+      checksum: row.checksum || undefined,
     })),
     cards: cardRows.map((row) => ({
       id: row.id,
@@ -535,6 +537,7 @@ export async function saveStudyTraceProjectSnapshot(
           type: file.type || '',
           extension: file.extension || '',
           category: file.category || 'other',
+          checksum: file.checksum || null,
           extractedText: file.extractedText || null,
           lastModifiedAt: toDate(file.lastModified),
           status: 'active',
