@@ -508,6 +508,7 @@ export type SaveStudyTraceSnapshotInput = {
     concern?: string;
     aiBoundary?: string;
     settings?: unknown;
+    latestTrustScore?: number;
   };
   files: SnapshotFile[];
   cards: SnapshotCard[];
@@ -543,6 +544,15 @@ export async function saveStudyTraceProjectSnapshot(
           input.project.settings === undefined
             ? project.settings
             : JSON.stringify(input.project.settings ?? {}),
+        // Keep the list-page score in sync with the workspace: the workspace
+        // shows the local heuristic score before any cloud AI run, so persist
+        // it with the autosave instead of only via createStudyTraceAnalysisRun.
+        latestTrustScore: Number.isFinite(Number(input.project.latestTrustScore))
+          ? Math.max(
+              0,
+              Math.min(100, Math.round(Number(input.project.latestTrustScore)))
+            )
+          : project.latestTrustScore,
         updatedAt: new Date(),
       })
       .where(eq(studytraceProject.id, projectId));

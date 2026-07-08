@@ -367,6 +367,9 @@ export function StudyTraceWorkspace({
         institutionPolicy,
         concern,
         aiBoundary,
+        // Keep the projects-list score in sync with the score shown in the
+        // workspace header.
+        latestTrustScore: analysis.trustScore,
         settings: {
           ...settings,
           submittedAt,
@@ -421,6 +424,7 @@ export function StudyTraceWorkspace({
       institutionPolicy,
       concern,
       aiBoundary,
+      analysis.trustScore,
       settings,
       files,
       cards,
